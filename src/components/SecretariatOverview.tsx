@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../store';
 import { Card } from './ui';
+import { AcademicCalendarComponent } from './AcademicCalendarComponent';
 import { 
   Users, UserCheck, UserMinus, GraduationCap, BarChart3, PieChart, 
   TrendingUp, TrendingDown, Users2, CheckSquare, MapPin, Calendar, 
@@ -13,7 +14,7 @@ import {
 
 export function SecretariatOverview() {
   const { students, employees, classes } = useStore();
-  const [selectedGroup, setSelectedGroup] = useState<'docentes' | 'cta' | 'estudantes'>('docentes');
+  const [selectedGroup, setSelectedGroup] = useState<'docentes' | 'cta' | 'estudantes' | 'calendario'>('docentes');
 
   // Helper: Age calculation
   const calculateAge = (birthDate: string) => {
@@ -200,7 +201,7 @@ export function SecretariatOverview() {
           <p className="text-sm text-slate-500">Análise do efetivo e aproveitamento escolar</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-lg shadow-sm">
-          {(['docentes', 'cta', 'estudantes'] as const).map((g) => (
+          {(['docentes', 'cta', 'estudantes', 'calendario'] as const).map((g) => (
             <button
               key={g}
               onClick={() => setSelectedGroup(g)}
@@ -215,6 +216,10 @@ export function SecretariatOverview() {
           ))}
         </div>
       </div>
+
+      {selectedGroup === 'calendario' && (
+        <AcademicCalendarComponent />
+      )}
 
       {/* Detailed Statistics for Secretariat General */}
       {selectedGroup === 'estudantes' && (

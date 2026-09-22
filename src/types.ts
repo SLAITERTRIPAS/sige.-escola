@@ -1,4 +1,29 @@
-export type Role = 'admin' | 'director' | 'pedagogical' | 'teacher' | 'secretariat' | 'national' | 'provincial' | 'district' | 'student';
+export interface AcademicArchive {
+  id: string;
+  year: number;
+  classId: string;
+  grades: Grade[];
+  examGrades: ExamGrade[];
+  archivedAt: string;
+}
+
+export type Role = 
+  | 'admin' 
+  | 'director' 
+  | 'pedagogical' 
+  | 'teacher' 
+  | 'secretariat' 
+  | 'secretariat_rh' 
+  | 'secretariat_patrimonio' 
+  | 'secretariat_recepcao' 
+  | 'secretariat_arquivo' 
+  | 'secretariat_financas' 
+  | 'librarian' 
+  | 'guardian' 
+  | 'national' 
+  | 'provincial' 
+  | 'district' 
+  | 'student';
 
 export interface User {
   id: string;
@@ -6,9 +31,15 @@ export interface User {
   area?: "CS" | "MCN" | "APTP";
   email: string;
   role: Role;
+  subRole?: string;
+  department?: string;
   schoolId?: string;
   districtId?: string;
   provinceId?: string;
+  signature?: string;
+  studentId?: string;
+  guardianStudentIds?: string[];
+  avatarUrl?: string;
 }
 
 export interface Province {
@@ -22,12 +53,41 @@ export interface District {
   provinceId: string;
 }
 
+export type SchoolManagementType = 'estatal' | 'privado';
+
+export type SchoolLevelType = 
+  | 'EP1'
+  | 'EP2'
+  | 'ENSINO BÁSICO'
+  | 'ENSINO SECUNDÁRIO DO 1 CICLO'
+  | 'ENSINO SECUNDÁRIO DO 2 CICLO'
+  | 'ENSINO PRÉ-UNIVERSITÁRIO'
+  | 'ENSINO TÉCNICO PROFISSIONAL'
+  | 'ENSINO MÉDIO PROFISSIONAL';
+
 export interface School {
   id: string;
   name: string;
-  area?: "CS" | "MCN" | "APTP";
-  address: string;
+  code?: string;
+  logoUrl?: string;
+  managementType?: SchoolManagementType;
+  province?: string;
+  district?: string;
   districtId?: string;
+  locality?: string;
+  administrativePost?: string;
+  address: string;
+  schoolTypes?: SchoolLevelType[];
+  directorName?: string;
+  dapName?: string;
+  secretariatChiefName?: string;
+  phone?: string;
+  email?: string;
+  shifts?: string[];
+  area?: "CS" | "MCN" | "APTP";
+  studentCapacity?: number;
+  autoAssignedClasses?: string[];
+  autoAssignedSubjects?: string[];
 }
 
 // Data Collection and Scheduling
@@ -59,10 +119,14 @@ export interface ChatMessage {
   senderId: string;
   senderName: string;
   senderRole: Role;
-  receiverLevel: 'national' | 'provincial' | 'district' | 'school';
+  receiverLevel: 'national' | 'provincial' | 'district' | 'school' | 'admin' | 'all';
   receiverId?: string; // specific provinceId, districtId, etc.
+  receiverName?: string;
+  subject?: string;
   text: string;
   timestamp: string;
+  read?: boolean;
+  category?: 'suporte' | 'oficial' | 'geral';
 }
 
 export interface PreviousSchool {
@@ -139,6 +203,8 @@ export interface StudentAttendance {
 
 export interface Student {
   id: string;
+  iue?: string; // Identificador Único do Estudante (Padrão MINEDH: [INICIAIS]-[DOC]-[ESCOLA]/[PROV]/[DIST]/[ANO])
+  nim?: string; // Número Interno de Matrícula (Padrão Diário: [ANO]-[DIST]-[SEQ])
   schoolId: string;
   name: string;
   frequencyNumber?: number; // Número fixo de identificação por ano letivo durante a frequência (não substituível)
@@ -286,6 +352,10 @@ export interface Grade {
   acs1?: number;
   acs2?: number;
   acs3?: number;
+  mediaAcs?: number;
+  trabalho1?: number;
+  trabalho2?: number;
+  mediaTrabalho?: number;
   apt?: number;
   media?: number;
   isLocked: boolean; // Once launched, cannot be altered
@@ -300,7 +370,7 @@ export interface ExamGrade {
   mediaFrequencia: number; // MF
   notaExame: number; // NE (0 a 20)
   classificacaoFinal: number; // CF
-  resultado: 'Aprovado' | 'Reprovado';
+  resultado: 'Aprovado' | 'Reprovado' | 'Dispensado' | 'Excluído';
   isLocked: boolean;
   launchedAt?: string;
 }
@@ -388,3 +458,259 @@ export interface UserNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+export interface EmailNotification {
+  id: string;
+  teacherEmail: string;
+  teacherName: string;
+  subject: string;
+  message: string;
+  classId?: string;
+  className?: string;
+  sentAt: string;
+  status: 'SENT' | 'FAILED';
+}
+
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  encryption: 'TLS' | 'SSL' | 'NONE';
+  senderName: string;
+  senderEmail: string;
+  replyTo?: string;
+  isActive: boolean;
+  lastTestedAt?: string;
+  autoSendOnTrimesterClose: boolean;
+}
+
+// 7. Gestão Financeira
+export interface FinancialTransaction {
+  id: string;
+  schoolId: string;
+  type: 'receita' | 'despesa';
+  category: 'Propinas' | 'Taxas' | 'Multas' | 'Outros Serviços' | 'Salários' | 'Material Escolar' | 'Água' | 'Energia' | 'Manutenção' | 'Investimento';
+  amount: number;
+  date: string;
+  description: string;
+  referenceNumber: string;
+  studentId?: string;
+  studentName?: string;
+  employeeId?: string;
+  payerBeneficiary: string;
+  paymentMethod: 'M-Pesa' | 'e-Mola' | 'Transferência Bancária' | 'POS' | 'Numerário' | 'Cheque';
+  status: 'pago' | 'pendente' | 'cancelado';
+  receiptUrl?: string;
+  month?: string;
+  year: number;
+}
+
+// 8. Gestão Patrimonial
+export interface PatrimonyItem {
+  id: string;
+  schoolId: string;
+  code: string;
+  name: string;
+  category: 'Computadores' | 'Mobiliário' | 'Equipamentos' | 'Viaturas' | 'Laboratórios';
+  status: 'Bom' | 'Regular' | 'Danificado' | 'Em Manutenção' | 'Abatido';
+  locationRoom: string;
+  acquisitionDate: string;
+  acquisitionValue: number;
+  serialNumber?: string;
+  responsiblePerson: string;
+  notes?: string;
+  lastMaintenanceDate?: string;
+}
+
+export interface PatrimonyMovement {
+  id: string;
+  schoolId: string;
+  itemId: string;
+  itemName: string;
+  type: 'Aquisição' | 'Movimentação' | 'Manutenção' | 'Abate';
+  date: string;
+  fromLocation?: string;
+  toLocation?: string;
+  reason: string;
+  registeredBy: string;
+  documentRef?: string;
+}
+
+// 9. Biblioteca Escolar
+export interface LibraryBook {
+  id: string;
+  schoolId: string;
+  title: string;
+  author: string;
+  isbn: string;
+  category: string;
+  gradeLevel?: string;
+  totalCopies: number;
+  availableCopies: number;
+  shelfLocation: string;
+  yearPublished?: number;
+  publisher?: string;
+}
+
+export interface LibraryLoan {
+  id: string;
+  schoolId: string;
+  bookId: string;
+  bookTitle: string;
+  userType: 'aluno' | 'professor' | 'funcionario';
+  userId: string;
+  userName: string;
+  loanDate: string;
+  expectedReturnDate: string;
+  returnDate?: string;
+  status: 'Activo' | 'Devolvido' | 'Atrasado';
+  penaltyAmount?: number;
+  notes?: string;
+}
+
+// 10. Recursos Humanos (RH)
+export interface HRContract {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  schoolId: string;
+  contractType: 'Nomeação Definitiva' | 'Contrato de Trabalho a Termo Certo' | 'Eventual' | 'Prestação de Serviços';
+  startDate: string;
+  endDate?: string;
+  salaryGrade: string;
+  status: 'Activo' | 'Renovado' | 'Cessado' | 'Em Avaliação';
+  position: string;
+}
+
+export interface HRLeave {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  schoolId: string;
+  type: 'Férias' | 'Licença de Doença' | 'Licença de Maternidade/Paternidade' | 'Casamento' | 'Luto' | 'Formação' | 'Assuntos Pessoais';
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  status: 'Pendente' | 'Aprovada' | 'Rejeitada';
+  approvedBy?: string;
+  documentProofUrl?: string;
+  reason?: string;
+}
+
+export interface HRPromotion {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  schoolId: string;
+  previousCategory: string;
+  newCategory: string;
+  date: string;
+  officialBulletinNumber?: string;
+  approvedBy: string;
+}
+
+export interface HRTraining {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  schoolId: string;
+  courseTitle: string;
+  institution: string;
+  hours: number;
+  completionDate: string;
+  certificateStatus: 'Concluído' | 'Em Curso' | 'Agendado';
+}
+
+// Secretaria: Atendimento / Recepção
+export interface ReceptionVisitor {
+  id: string;
+  schoolId: string;
+  visitorName: string;
+  idCard: string;
+  phone: string;
+  reason: 'Matrículas/Secretaria' | 'Reunião com Direcção' | 'Contacto com Professor' | 'Levantamento de Documentos' | 'Informações Gerais' | 'Outro';
+  departmentTarget: string;
+  entryTime: string;
+  exitTime?: string;
+  status: 'Em Atendimento' | 'Concluído' | 'Aguardando';
+  attendantName: string;
+  notes?: string;
+}
+
+export interface ReceptionTicket {
+  id: string;
+  schoolId: string;
+  ticketNumber: string;
+  serviceType: 'Secretaria Geral' | 'Tesouraria' | 'Matrículas' | 'Declarações e Certificados' | 'Gabinete do Director';
+  requestedAt: string;
+  calledAt?: string;
+  completedAt?: string;
+  status: 'waiting' | 'in_service' | 'done';
+}
+
+// Secretaria: Arquivo Escolar
+export interface ArchiveRecord {
+  id: string;
+  schoolId: string;
+  code: string;
+  title: string;
+  recordType: 'Processo Individual de Aluno' | 'Livro de Termos de Exames' | 'Livro de Matrículas' | 'Pauta Histórica' | 'Dossiê de Funcionário' | 'Ofício/Expediente';
+  year: number;
+  boxNumber: string;
+  shelfNumber: string;
+  roomNumber: string;
+  digitalCopyUrl?: string;
+  status: 'Arquivado' | 'Em Consulta' | 'Transferido';
+  notes?: string;
+}
+
+// Horários e Salas
+export interface ClassSchedule {
+  id: string;
+  schoolId: string;
+  classId: string;
+  className: string;
+  dayOfWeek: 'Segunda-feira' | 'Terça-feira' | 'Quarta-feira' | 'Quinta-feira' | 'Sexta-feira' | 'Sábado';
+  timeSlot: string;
+  subjectId: string;
+  subjectName: string;
+  teacherId: string;
+  teacherName: string;
+  room: string;
+}
+
+export interface SchoolRoom {
+  id: string;
+  schoolId: string;
+  name: string;
+  capacity: number;
+  type: 'Sala Normal' | 'Laboratório de Informática' | 'Laboratório de Ciências' | 'Biblioteca' | 'Ginásio/Polidesportivo' | 'Oficina';
+  status: 'Disponível' | 'Ocupada' | 'Em Manutenção';
+}
+
+// 14. Inteligência Artificial Educacional
+export interface AIPrediction {
+  studentId: string;
+  studentName: string;
+  classId: string;
+  className: string;
+  dropOutRiskScore: number; // 0-100%
+  riskLevel: 'Baixo' | 'Médio' | 'Alto';
+  riskFactors: string[];
+  recommendedInterventions: string[];
+  predictedFinalAverage: number;
+  attendanceRate: number;
+  generatedAt: string;
+}
+
+export interface AIReportGeneration {
+  id: string;
+  schoolId: string;
+  title: string;
+  category: 'Desempenho Pedagógico' | 'Previsão de Abandono' | 'Planeamento Escolar' | 'Relatório Executivo';
+  content: string;
+  generatedAt: string;
+  author: string;
+}
+

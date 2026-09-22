@@ -296,14 +296,19 @@ export const AcademicCalendarComponent: React.FC = () => {
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <CalendarIcon className="text-blue-600" size={24} />
-            Calendário Académico & Agendamento
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Clique em qualquer dia para agendar eventos, definir público-alvo, número de sala e enviar mensagens com notificação aos colaboradores.
-          </p>
+        <div className="flex items-center gap-4">
+            <button onClick={() => window.history.back()} className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-2 rounded-xl transition-colors">
+                <ChevronLeft size={20} />
+            </button>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <CalendarIcon className="text-blue-600" size={24} />
+                Calendário Académico & Agendamento
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Clique em qualquer dia para agendar eventos, definir público-alvo, número de sala e enviar mensagens com notificação aos colaboradores.
+              </p>
+            </div>
         </div>
 
         {canManageEvents && (

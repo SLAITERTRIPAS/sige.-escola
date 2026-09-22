@@ -9,6 +9,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { CollapsibleSidebar } from './CollapsibleSidebar';
 import { SidebarMenu } from './SidebarMenu';
+import { generateStudentHistoryPDF } from '../utils/pdfGenerator';
 
 export const StudentDashboard: React.FC = () => {
   const { currentUser, students, schools, districts, provinces, grades, subjects, submitTransferRequest, submitComplaint, updateSchoolChoice } = useStore();
@@ -85,13 +86,21 @@ const TabButton = ({ active, onClick, icon, label }: any) => (
 );
 
 const GradesView = ({ studentId }: { studentId: string }) => {
-  const { grades, subjects } = useStore();
+  const { grades, subjects, students, classes } = useStore();
   const studentGrades = grades.filter(g => g.studentId === studentId);
+  const student = students.find(s => s.id === studentId)!;
+
+  const handleExportHistory = () => {
+    generateStudentHistoryPDF(student, studentGrades, subjects, classes);
+  };
 
   const trimesters = [1, 2, 3];
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div className="flex justify-end">
+        <button onClick={handleExportHistory} className="bg-cyan-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Exportar Histórico PDF</button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {trimesters.map(t => (
           <Card key={t} className="p-6 bg-white border border-slate-200 shadow-sm rounded-xl">
@@ -105,8 +114,8 @@ const GradesView = ({ studentId }: { studentId: string }) => {
                 return (
                   <div key={sub.id} className="flex justify-between items-center text-sm">
                     <span className="text-slate-500">{sub.name}</span>
-                    <span className={`font-mono font-bold ${grade && grade.value >= 10 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {grade ? grade.value.toFixed(1) : '-'}
+                    <span className={`font-mono font-bold ${grade && (grade.media || 0) >= 10 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {grade ? (grade.media || 0).toFixed(1) : '-'}
                     </span>
                   </div>
                 );

@@ -26,6 +26,7 @@ import { DeclarationDocument } from "../components/DeclarationDocument";
 import { SecretariatOverview } from "../components/SecretariatOverview";
 import { CollectionFormView } from "../components/CollectionFormView";
 import { GovernanceChat } from "../components/GovernanceChat";
+import { OfficialMessages } from "../components/OfficialMessages";
 import { SignatureManager } from "../components/SignatureManager";
 import { AcademicCalendarComponent } from "../components/AcademicCalendarComponent";
 import {
@@ -43,6 +44,17 @@ import { CollapsibleSidebar } from "../components/CollapsibleSidebar";
 import { SidebarMenu } from "../components/SidebarMenu";
 import { MOZAMBIQUE_PROVINCES, getDistrictsForProvince } from "../data/mozambiqueLocations";
 import { QuickSearchHeader } from "../components/QuickSearchHeader";
+import { 
+  generateIUE, 
+  generateNIM, 
+  formatDocumentReference, 
+  parseIUE, 
+  extractInitials, 
+  extractSchoolCode, 
+  normalizeProvince, 
+  extractDistrictCode, 
+  normalizeDocumentNumber 
+} from "../utils/iueGenerator";
 
 export function SecretariatDashboard() {
   const {
@@ -63,6 +75,7 @@ export function SecretariatDashboard() {
     | "employees"
     | "collection"
     | "messages"
+    | "calendar"
   >("overview");
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -160,20 +173,55 @@ export function SecretariatDashboard() {
     generalObservations: "",
   });
 
+  // Live IUE and NIM calculations for real-time visualization and enrollment
+  const liveIUE = generateIUE({
+    name: newStudent.name || "NOME DO ESTUDANTE",
+    documentNumber: newStudent.idCardNumber || newStudent.nuit,
+    idCardNumber: newStudent.idCardNumber,
+    nuit: newStudent.nuit,
+    schoolName: "Escola Secundária Josina Machel",
+    schoolCode: "ESJM",
+    province: newStudent.province || "Maputo Cidade",
+    district: newStudent.district || "Kamavota",
+    academicYear: newStudent.academicYear || 2026,
+  });
+
+  const liveNIM = generateNIM({
+    year: newStudent.academicYear || 2026,
+    district: newStudent.district || "Kamavota",
+    sequenceNumber: (students?.length || 0) + 1,
+  });
+
+  const parsedLiveIUE = parseIUE(liveIUE);
+
   const handleEnroll = (e: React.FormEvent) => {
     e.preventDefault();
-    const generatedProcessCode =
-      newStudent.processCode.trim() ||
-      `PROC-2026-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-    const generatedStudentNumber =
-      newStudent.studentNumber.trim() ||
-      `ALU-${Math.floor(1000 + Math.random() * 9000)}`;
+    const calculatedIUE = generateIUE({
+      name: newStudent.name,
+      documentNumber: newStudent.idCardNumber || newStudent.nuit,
+      idCardNumber: newStudent.idCardNumber,
+      nuit: newStudent.nuit,
+      schoolName: "Escola Secundária Josina Machel",
+      schoolCode: "ESJM",
+      province: newStudent.province,
+      district: newStudent.district,
+      academicYear: newStudent.academicYear,
+    });
+
+    const calculatedNIM = generateNIM({
+      year: newStudent.academicYear,
+      district: newStudent.district,
+      sequenceNumber: (students?.length || 0) + 1,
+    });
 
     enrollStudent({
       schoolId: "s1",
       ...newStudent,
-      processCode: generatedProcessCode,
-      studentNumber: generatedStudentNumber,
+      iue: calculatedIUE,
+      nim: calculatedNIM,
+      id: calculatedIUE,
+      processCode: newStudent.processCode.trim() || calculatedIUE,
+      studentNumber: newStudent.studentNumber.trim() || calculatedIUE,
     });
 
     // Reset form
@@ -378,7 +426,7 @@ export function SecretariatDashboard() {
           </div>
         )}
 
-        {["reports", "statistics", "signature", "messages"].includes(
+        {["reports", "statistics"].includes(
           activeTab,
         ) && (
           <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
@@ -452,43 +500,7 @@ export function SecretariatDashboard() {
           </div>
         )}
 
-        {activeTab === "messages" && (
-          <div className="max-w-7xl mx-auto h-[calc(100vh-100px)] animate-in fade-in duration-500 flex gap-6">
-            <div className="w-64 space-y-2">
-              <Button className="w-full flex items-center gap-2 bg-blue-600 hover:bg-blue-700">
-                <Plus size={18} /> Nova Mensagem
-              </Button>
-              <Button variant="ghost" className="w-full justify-start gap-2">
-                <Inbox size={18} /> Entrada
-              </Button>
-              <Button variant="ghost" className="w-full justify-start gap-2">
-                <Send size={18} /> Saída
-              </Button>
-            </div>
-            <Card className="flex-1 p-0 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 p-2 rounded-full">
-                    <User size={20} className="text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900">Nova Mensagem de Sistema</h3>
-                    <p className="text-xs text-slate-500">Remetente: {currentUser?.name}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-6 flex-1 flex flex-col gap-4">
-                <div className="text-slate-400 text-sm italic">Nova Mensagem: Defina o assunto e o texto</div>
-                <hr />
-                <input className="w-full text-lg outline-none" placeholder="ASSUNTO DA MENSAGEM..." />
-                <textarea className="flex-1 w-full outline-none resize-none" placeholder="Escreva aqui o conteúdo da sua mensagem..." />
-                <div className="flex justify-end pt-4 border-t">
-                  <Button className="bg-blue-600 hover:bg-blue-700">SELECIONAR DESTINATÁRIOS <Users size={16} className="ml-2"/></Button>
-                </div>
-              </div>
-            </Card>
-          </div>
-        )}
+        {activeTab === "messages" && <OfficialMessages />}
 
         {activeTab === "enrollment" && (
           <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in">
@@ -612,45 +624,120 @@ export function SecretariatDashboard() {
                   </div>
 
                 <form onSubmit={handleEnroll} className="space-y-8">
+                  {/* IDENTIFICADOR ÚNICO DO ESTUDANTE (IUE) - PADRÃO OFICIAL MINEDH / EDUGESTÃO */}
+                  <div className="bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-xl border border-blue-700/50">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-blue-800/60">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full">
+                            Padrão Oficial MINEDH / EduGestão
+                          </span>
+                          <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Geração Automática Ativa
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-black tracking-tight text-white mt-1">
+                          Identificador Único do Estudante (IUE)
+                        </h3>
+                        <p className="text-xs text-blue-200/80">
+                          Estrutura Padronizada: <code className="bg-blue-950/80 px-1.5 py-0.5 rounded text-amber-300 font-mono text-[11px]">[INICIAIS]-[Nº_DOC]-[ESCOLA]/[PROVÍNCIA]/[DISTRITO]/[ANO]</code>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">NIM (Uso Diário)</span>
+                        <code className="text-sm font-mono font-black text-emerald-400 bg-slate-950 px-2.5 py-1 rounded border border-emerald-500/30">
+                          {liveNIM}
+                        </code>
+                      </div>
+                    </div>
+
+                    {/* LIVE GENERATED IUE DISPLAY BADGE */}
+                    <div className="mt-4 bg-slate-950/80 p-4 rounded-xl border border-blue-500/30 flex flex-col md:flex-row items-center justify-between gap-4">
+                      <div className="w-full md:w-auto">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Código Gerado em Tempo Real (IUE)
+                        </span>
+                        <div className="text-base sm:text-lg md:text-xl font-mono font-black text-amber-400 tracking-wider break-all select-all">
+                          {liveIUE}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-1 font-mono">
+                          {formatDocumentReference(liveIUE, 'REF_EDUGESTAO')}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="px-2 py-1 bg-blue-950 border border-blue-700/50 rounded text-[11px] font-mono text-blue-300">
+                          <strong className="text-slate-400 font-normal">Iniciais:</strong> {parsedLiveIUE.initials || '...'}
+                        </span>
+                        <span className="px-2 py-1 bg-blue-950 border border-blue-700/50 rounded text-[11px] font-mono text-blue-300">
+                          <strong className="text-slate-400 font-normal">Doc:</strong> {parsedLiveIUE.documentNumber || '...'}
+                        </span>
+                        <span className="px-2 py-1 bg-blue-950 border border-blue-700/50 rounded text-[11px] font-mono text-blue-300">
+                          <strong className="text-slate-400 font-normal">Escola:</strong> {parsedLiveIUE.schoolCode || '...'}
+                        </span>
+                        <span className="px-2 py-1 bg-blue-950 border border-blue-700/50 rounded text-[11px] font-mono text-blue-300">
+                          <strong className="text-slate-400 font-normal">Prov:</strong> {parsedLiveIUE.province || '...'}
+                        </span>
+                        <span className="px-2 py-1 bg-blue-950 border border-blue-700/50 rounded text-[11px] font-mono text-blue-300">
+                          <strong className="text-slate-400 font-normal">Dist:</strong> {parsedLiveIUE.district || '...'}
+                        </span>
+                        <span className="px-2 py-1 bg-blue-950 border border-blue-700/50 rounded text-[11px] font-mono text-blue-300">
+                          <strong className="text-slate-400 font-normal">Ano:</strong> {parsedLiveIUE.year || '...'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] text-blue-200/90 pt-2 border-t border-blue-800/40">
+                      <div>✓ ID Oficial do Aluno</div>
+                      <div>✓ Código do Processo</div>
+                      <div>✓ Chave de Pesquisa Universal</div>
+                      <div>✓ Payload QR Code & Certificados</div>
+                    </div>
+                  </div>
+
                   {/* CAPA DO PROCESSO */}
                   <div className="bg-amber-50/60 p-4 border border-amber-200 rounded-md">
-                    <h3 className="font-bold text-sm uppercase text-amber-950 border-b border-amber-300 pb-1 mb-3 flex items-center gap-2">
-                      <BookOpen className="h-4 w-4 text-amber-800" /> Capa do
-                      Processo
+                    <h3 className="font-bold text-sm uppercase text-amber-950 border-b border-amber-300 pb-1 mb-3 flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-amber-800" /> Capa do Processo
+                      </span>
+                      <span className="text-xs font-mono font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                        IUE: {liveIUE}
+                      </span>
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1">
-                          Código do Processo
+                          Código do Processo / IUE (Auto)
                         </label>
                         <input
                           type="text"
-                          placeholder="Ex: PROC-2026-0842"
-                          value={newStudent.processCode}
+                          placeholder={liveIUE}
+                          value={newStudent.processCode || liveIUE}
                           onChange={(e) =>
                             setNewStudent({
                               ...newStudent,
                               processCode: e.target.value,
                             })
                           }
-                          className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                          className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm font-mono outline-none focus:border-blue-600"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-700 mb-1">
-                          Número do Aluno / Frequência
+                          Número do Aluno / NIM (Auto)
                         </label>
                         <input
                           type="text"
-                          placeholder="Ex: ALU-1049"
-                          value={newStudent.studentNumber}
+                          placeholder={liveNIM}
+                          value={newStudent.studentNumber || liveNIM}
                           onChange={(e) =>
                             setNewStudent({
                               ...newStudent,
                               studentNumber: e.target.value,
                             })
                           }
-                          className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                          className="w-full bg-white border border-gray-300 rounded px-3 py-1.5 text-sm font-mono outline-none focus:border-blue-600"
                         />
                       </div>
                       <div>
@@ -1691,6 +1778,12 @@ export function SecretariatDashboard() {
         )}
 
         {activeTab === "employees" && <EmployeeManagement />}
+
+        {activeTab === "signature" && (
+          <div className="max-w-5xl mx-auto pb-12">
+            <SignatureManager />
+          </div>
+        )}
 
         {activeTab === "certificates" && (
           <div className="max-w-5xl mx-auto space-y-6">

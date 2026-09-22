@@ -1,22 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useStore } from '../store';
-import { Card, Input, Button } from '../components/ui';
-import { School } from 'lucide-react';
+import { Card } from '../components/ui';
 
 export function LoginView() {
   const { login } = useStore();
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!login(email)) {
-      setError('Utilizador não encontrado. Verifique o email.');
-    }
-  };
 
   const handleQuickLogin = (quickEmail: string) => {
-    setEmail(quickEmail);
     login(quickEmail);
   };
 
@@ -39,45 +28,16 @@ export function LoginView() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <Card className="px-4 py-8 sm:px-10">
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email de Acesso
-              </label>
-              <div className="mt-1">
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ex: admin@escola.com"
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <Button type="submit" className="w-full">
-                Entrar
-              </Button>
-            </div>
-          </form>
-
-          <div className="mt-6 border-t border-gray-200 pt-6">
-            <h3 className="text-xs font-bold uppercase text-gray-500 mb-4 tracking-wider text-center">Acesso Rápido por Perfil:</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border-b border-gray-200 pb-6 mb-6">
+            <h3 className="text-xs font-bold uppercase text-gray-500 tracking-wider text-center">Selecionar Utilizador de Teste:</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => handleQuickLogin('admin@escola.com')}
                 className="col-span-full px-3 py-2.5 text-sm rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition-all font-bold flex items-center justify-center gap-2 shadow-sm border border-slate-700"
               >
-                <span>🛡️ Perfil: Administrador Geral</span>
+                <span>🛡️ Administrador Geral</span>
               </button>
 
               <button
@@ -144,7 +104,6 @@ export function LoginView() {
                 <span>🌍 Nacional</span>
               </button>
             </div>
-          </div>
         </Card>
       </div>
     </div>

@@ -1,6 +1,6 @@
 {
-  "name": "EduGestão - Sistema Escolar",
-  "description": "Sistema completo de gestão escolar com portais para Secretaria, Professores, Pedagogia e Direção.",
+  "name": "EduGestão - Sistema Integrado de Gestão Escolar",
+  "description": "Plataforma inteligente para gestão administrativa, pedagógica, académica, financeira, patrimonial, recursos humanos e estatística das instituições de ensino em Moçambique.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

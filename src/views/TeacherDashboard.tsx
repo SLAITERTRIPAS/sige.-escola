@@ -24,6 +24,14 @@ import { TeacherAssignment, LessonSummary } from "../types";
 import { CollapsibleSidebar } from "../components/CollapsibleSidebar";
 import { SidebarMenu } from "../components/SidebarMenu";
 import { AcademicCalendarComponent } from "../components/AcademicCalendarComponent";
+import { TeacherStatistics } from "../components/TeacherStatistics";
+import { TeacherReport } from "../components/TeacherReport";
+import { SignatureManager } from "../components/SignatureManager";
+import { GovernanceChat } from "../components/GovernanceChat";
+import { OfficialMessages } from "../components/OfficialMessages";
+
+const MOZAMBIQUE_LOGO_URL =
+  "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQua66hW5lOO75LXVLwiJWQJKtgoRJzX58EUSAAc2QdYQ&s=10";
 
 export function TeacherDashboard() {
   const {
@@ -35,10 +43,13 @@ export function TeacherDashboard() {
     grades,
     examGrades,
     lessonSummaries,
+    schools,
     addGrade,
     addExamGrade,
     addLessonSummary,
   } = useStore();
+
+  const school = (schools || []).find((s) => s.id === currentUser?.schoolId);
 
   const myAssignments = assignments.filter(
     (a) => a.teacherId === currentUser?.id,
@@ -65,7 +76,14 @@ export function TeacherDashboard() {
   const [draftGrades, setDraftGrades] = useState<
     Record<
       string,
-      { acs1?: number; acs2?: number; acs3?: number; apt?: number }
+      {
+        acs1?: number;
+        acs2?: number;
+        acs3?: number;
+        trabalho1?: number;
+        trabalho2?: number;
+        apt?: number;
+      }
     >
   >({});
 
@@ -93,15 +111,15 @@ export function TeacherDashboard() {
 
   const handleGradeChange = (
     studentId: string,
-    field: "acs1" | "acs2" | "acs3" | "apt",
+    field: "acs1" | "acs2" | "acs3" | "trabalho1" | "trabalho2" | "apt",
     val: string,
   ) => {
-    const num = parseInt(val);
+    const num = parseFloat(val);
     if (isNaN(num) && val !== "") return;
     if (num < 0 || num > 20) return;
 
     setDraftGrades((prev) => {
-      const studentGrades = prev[studentId] || {};
+      const studentGrades = { ...(prev[studentId] || {}) };
       const next = { ...prev };
 
       if (val === "") {
@@ -123,15 +141,34 @@ export function TeacherDashboard() {
     const dGrades = draftGrades[studentId];
     if (!dGrades || !selectedAssignment || !currentUser) return;
 
-    let media = 0;
-    if (
-      dGrades.acs1 !== undefined &&
-      dGrades.acs2 !== undefined &&
-      dGrades.acs3 !== undefined &&
-      dGrades.apt !== undefined
-    ) {
-      media = (dGrades.acs1 + dGrades.acs2 + dGrades.acs3 + dGrades.apt) / 4;
+    const acsArr = [dGrades.acs1, dGrades.acs2, dGrades.acs3].filter(
+      (v): v is number => v !== undefined && !isNaN(v),
+    );
+    const mediaAcs =
+      acsArr.length > 0
+        ? acsArr.reduce((a, b) => a + b, 0) / acsArr.length
+        : undefined;
+
+    const trabArr = [dGrades.trabalho1, dGrades.trabalho2].filter(
+      (v): v is number => v !== undefined && !isNaN(v),
+    );
+    const mediaTrabalho =
+      trabArr.length > 0
+        ? trabArr.reduce((a, b) => a + b, 0) / trabArr.length
+        : undefined;
+
+    let mediaFinal: number | undefined = undefined;
+    if (mediaAcs !== undefined && dGrades.apt !== undefined) {
+      if (mediaTrabalho !== undefined) {
+        // Com trabalhos: (Média ACS + Média de Trabalho + APT) / 3
+        mediaFinal = (mediaAcs + mediaTrabalho + dGrades.apt) / 3;
+      } else {
+        // Sem trabalhos: (Média ACS + APT) / 2
+        mediaFinal = (mediaAcs + dGrades.apt) / 2;
+      }
     }
+
+    if (mediaFinal === undefined) return;
 
     addGrade({
       studentId,
@@ -142,8 +179,12 @@ export function TeacherDashboard() {
       acs1: dGrades.acs1,
       acs2: dGrades.acs2,
       acs3: dGrades.acs3,
+      mediaAcs,
+      trabalho1: dGrades.trabalho1,
+      trabalho2: dGrades.trabalho2,
+      mediaTrabalho,
       apt: dGrades.apt,
-      media: media,
+      media: mediaFinal,
     });
 
     showFeedback(
@@ -192,8 +233,9 @@ export function TeacherDashboard() {
         status: "Dispensado",
         label: "Dispensado",
         badge: "bg-blue-50 text-blue-700 border-blue-200",
-        canTakeExam: true,
-        desc: "Dispensado do exame (pode realizar exame para melhoria)",
+        canTakeExam: false,
+        isDispensado: true,
+        desc: "Dispensado do exame por média de frequência elevada (>= 14)",
       };
     }
     if (mf >= 9.5) {
@@ -202,6 +244,7 @@ export function TeacherDashboard() {
         label: "Admitido ao Exame",
         badge: "bg-green-50 text-green-700 border-green-200",
         canTakeExam: true,
+        isDispensado: false,
         desc: "Inscrito e admitido a exame",
       };
     }
@@ -210,6 +253,7 @@ export function TeacherDashboard() {
       label: "Excluído",
       badge: "bg-red-50 text-red-700 border-red-200",
       canTakeExam: false,
+      isDispensado: false,
       desc: "Média de frequência inferior a 9.5 valores",
     };
   };
@@ -237,10 +281,29 @@ export function TeacherDashboard() {
   // Launch a single exam grade
   const handleLaunchExamGrade = (studentId: string) => {
     if (!selectedAssignment || !currentUser) return;
+    const mf = getStudentSubjectMF(studentId, selectedAssignment.subjectId);
+    const admission = getExamAdmissionInfo(mf);
+
+    if (admission.isDispensado) {
+      addExamGrade({
+        studentId,
+        classId: selectedAssignment.classId,
+        subjectId: selectedAssignment.subjectId,
+        teacherId: currentUser.id,
+        mediaFrequencia: mf,
+        notaExame: mf,
+        classificacaoFinal: mf,
+        resultado: "Dispensado",
+      });
+      showFeedback(
+        "Status 'Dispensado' confirmado e sincronizado com a Pauta Geral de Exames!",
+      );
+      return;
+    }
+
     const ne = draftExamGrades[studentId];
     if (ne === undefined) return;
 
-    const mf = getStudentSubjectMF(studentId, selectedAssignment.subjectId);
     // Official Mozambican ESG standard formula: CF = 40% MF + 60% NE (rounded)
     const cf = Math.round(mf * 0.4 + ne * 0.6);
     const resultado = cf >= 9.5 ? "Aprovado" : "Reprovado";
@@ -277,35 +340,54 @@ export function TeacherDashboard() {
           eg.classId === selectedAssignment.classId,
       );
 
-      if (!existing && draftExamGrades[student.id] !== undefined) {
-        const ne = draftExamGrades[student.id];
+      if (!existing) {
         const mf = getStudentSubjectMF(
           student.id,
           selectedAssignment.subjectId,
         );
-        const cf = Math.round(mf * 0.4 + ne * 0.6);
-        const resultado = cf >= 9.5 ? "Aprovado" : "Reprovado";
+        const admission = getExamAdmissionInfo(mf);
 
-        addExamGrade({
-          studentId: student.id,
-          classId: selectedAssignment.classId,
-          subjectId: selectedAssignment.subjectId,
-          teacherId: currentUser.id,
-          mediaFrequencia: mf,
-          notaExame: ne,
-          classificacaoFinal: cf,
-          resultado,
-        });
-        launchedCount++;
+        if (admission.isDispensado) {
+          addExamGrade({
+            studentId: student.id,
+            classId: selectedAssignment.classId,
+            subjectId: selectedAssignment.subjectId,
+            teacherId: currentUser.id,
+            mediaFrequencia: mf,
+            notaExame: mf,
+            classificacaoFinal: mf,
+            resultado: "Dispensado",
+          });
+          launchedCount++;
+        } else if (
+          admission.canTakeExam &&
+          draftExamGrades[student.id] !== undefined
+        ) {
+          const ne = draftExamGrades[student.id];
+          const cf = Math.round(mf * 0.4 + ne * 0.6);
+          const resultado = cf >= 9.5 ? "Aprovado" : "Reprovado";
+
+          addExamGrade({
+            studentId: student.id,
+            classId: selectedAssignment.classId,
+            subjectId: selectedAssignment.subjectId,
+            teacherId: currentUser.id,
+            mediaFrequencia: mf,
+            notaExame: ne,
+            classificacaoFinal: cf,
+            resultado,
+          });
+          launchedCount++;
+        }
       }
     });
 
     if (launchedCount > 0) {
       showFeedback(
-        `${launchedCount} notas de exame lançadas e copiadas diretamente para a Pauta Geral de Exames!`,
+        `${launchedCount} registros de exames e dispensas lançados com sucesso!`,
       );
     } else {
-      showFeedback("Nenhuma nova nota preenchida para lançar.", "error");
+      showFeedback("Nenhuma nova nota ou dispensa pendente para lançar.", "error");
     }
   };
 
@@ -353,6 +435,16 @@ export function TeacherDashboard() {
   });
 
   const renderMainContent = () => {
+    if (activeTab === 'statistics') {
+      return <TeacherStatistics />;
+    }
+    if (activeTab === 'reports') {
+      return <TeacherReport />;
+    }
+    if (activeTab === 'calendar') {
+      return <AcademicCalendarComponent />;
+    }
+
     if (!selectedAssignment) {
       return (
         <div className="h-full flex flex-col items-center justify-center text-center py-20">
@@ -372,9 +464,9 @@ export function TeacherDashboard() {
 
     const subject = subjects.find((s) => s.id === selectedAssignment.subjectId);
     const turma = classes.find((c) => c.id === selectedAssignment.classId);
-    const myStudents = students.filter(
-      (s) => s.classId === selectedAssignment.classId,
-    );
+    const myStudents = students
+      .filter((s) => s.classId === selectedAssignment.classId)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-PT', { sensitivity: 'base' }));
 
     // Exam statistics for this class and subject
     const admittedCount = myStudents.filter((s) => {
@@ -497,6 +589,69 @@ export function TeacherDashboard() {
         {/* MODE 1: CADERNETA TRIMESTRAL */}
         {activeMode === "caderneta" && (
           <Card className="p-6">
+            {/* CABEÇALHO OFICIAL DA CADERNETA DO PROFESSOR */}
+            <div className="bg-white border-2 border-gray-300 rounded-xl p-5 mb-6 shadow-sm pauta-print">
+              <div className="flex flex-col items-center text-center pb-4 border-b border-gray-200">
+                <img
+                  src={MOZAMBIQUE_LOGO_URL}
+                  alt="Emblema da República de Moçambique"
+                  className="h-12 w-12 object-contain mb-1.5 mx-auto"
+                  referrerPolicy="no-referrer"
+                />
+                <h4 className="text-xs font-bold uppercase tracking-widest text-gray-800">
+                  REPÚBLICA DE MOÇAMBIQUE
+                </h4>
+                <h5 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+                  MINISTÉRIO DA EDUCAÇÃO E DESENVOLVIMENTO HUMANO
+                </h5>
+                <p className="text-sm font-extrabold text-blue-900 mt-0.5 uppercase">
+                  {school?.name || "ESCOLA SECUNDÁRIA GERAL"}
+                </p>
+                <div className="mt-2 inline-block bg-blue-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-1 rounded-md shadow-sm">
+                  CADERNETA DO PROFESSOR — {selectedTrimester}º TRIMESTRE
+                </div>
+              </div>
+
+              {/* Grid do Cabeçalho com Nome do Docente e da Cadeira */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 text-xs">
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                  <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                    DOCENTE / PROFESSOR
+                  </span>
+                  <span className="font-extrabold text-gray-900 text-sm block truncate">
+                    {currentUser?.name || "Não especificado"}
+                  </span>
+                </div>
+
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                  <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                    CADEIRA / DISCIPLINA
+                  </span>
+                  <span className="font-extrabold text-blue-800 text-sm block truncate">
+                    {subject?.name || "Não especificada"}
+                  </span>
+                </div>
+
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                  <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                    TURMA E CLASSE
+                  </span>
+                  <span className="font-extrabold text-gray-900 text-sm block truncate">
+                    {turma?.gradeLevel || "10ª"} • {turma?.name || "Turma A"}
+                  </span>
+                </div>
+
+                <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                  <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                    ANO LECTIVO / PERÍODO
+                  </span>
+                  <span className="font-extrabold text-gray-900 text-sm block truncate">
+                    {new Date().getFullYear()} • {turma?.period || "Manhã"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div className="flex items-center space-x-3">
                 <label className="font-semibold text-sm text-gray-700">
@@ -515,18 +670,29 @@ export function TeacherDashboard() {
                 </select>
               </div>
 
-              <div className="text-xs text-gray-500">
-                Lançamento contínuo: ACS1, ACS2, ACS3 e APT (Média = 40% ACS +
-                60% APT ou Média Aritmética)
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => window.print()}
+                  variant="outline"
+                  className="text-xs gap-1.5 h-8 border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  <FileText className="h-3.5 w-3.5" /> Imprimir Caderneta
+                </Button>
+                <div className="text-xs text-gray-600 bg-amber-50/80 px-3 py-1.5 rounded-md border border-amber-200">
+                  <strong>Cálculo Média Final:</strong> Com Trabalhos = (Média ACS + Média de Trabalho + APT) / 3 • Sem Trabalhos = (Média ACS + APT) / 2
+                </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="overflow-x-auto rounded-lg border border-gray-200 pauta-print">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
+                    <th className="px-2 py-3 text-center text-xs font-bold uppercase border-r border-gray-200 w-12">
+                      N/O
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase border-r border-gray-200">
-                      Aluno
+                      NOME COMPLETO
                     </th>
                     <th className="px-2 py-3 text-center text-xs font-bold uppercase">
                       ACS1
@@ -537,18 +703,32 @@ export function TeacherDashboard() {
                     <th className="px-2 py-3 text-center text-xs font-bold uppercase">
                       ACS3
                     </th>
-                    <th className="px-2 py-3 text-center text-xs font-bold text-gray-800 uppercase bg-gray-100 border-x border-gray-200">
-                      Média
+                    <th className="px-2 py-3 text-center text-xs font-bold text-gray-800 uppercase bg-blue-50/60 border-x border-gray-200">
+                      MEDIA
                       <br />
                       ACS
+                    </th>
+                    <th className="px-2 py-3 text-center text-xs font-bold uppercase">
+                      TRABALHO 1
+                    </th>
+                    <th className="px-2 py-3 text-center text-xs font-bold uppercase">
+                      TRABALHO 2
+                    </th>
+                    <th className="px-2 py-3 text-center text-xs font-bold text-gray-800 uppercase bg-amber-50/60 border-x border-gray-200">
+                      MEDIA DE
+                      <br />
+                      TRAB
                     </th>
                     <th className="px-2 py-3 text-center text-xs font-bold uppercase">
                       APT
                     </th>
                     <th className="px-2 py-3 text-center text-xs font-bold text-gray-800 uppercase bg-gray-100 border-x border-gray-200">
-                      Média
+                      MEDIA
                       <br />
-                      Final
+                      FINAL
+                    </th>
+                    <th className="px-2 py-3 text-center text-xs font-bold uppercase bg-gray-50 border-r border-gray-200">
+                      Comportamento
                     </th>
                     <th className="px-2 py-3 text-center text-xs font-bold uppercase">
                       Classificação
@@ -562,14 +742,14 @@ export function TeacherDashboard() {
                   {myStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={14}
                         className="px-6 py-8 text-center text-gray-500"
                       >
                         Nenhum estudante inscrito nesta turma.
                       </td>
                     </tr>
                   ) : (
-                    myStudents.map((student) => {
+                    myStudents.map((student, index) => {
                       const existingGrade = grades.find(
                         (g) =>
                           g.studentId === student.id &&
@@ -580,44 +760,44 @@ export function TeacherDashboard() {
                       const isLocked = existingGrade?.isLocked;
                       const dg = draftGrades[student.id] || {};
 
-                      let draftMediaAcs = 0;
-                      if (
-                        dg.acs1 !== undefined &&
-                        dg.acs2 !== undefined &&
-                        dg.acs3 !== undefined
-                      ) {
-                        draftMediaAcs = (dg.acs1 + dg.acs2 + dg.acs3) / 3;
-                      }
+                      // Values
+                      const acs1 = isLocked ? existingGrade?.acs1 : dg.acs1;
+                      const acs2 = isLocked ? existingGrade?.acs2 : dg.acs2;
+                      const acs3 = isLocked ? existingGrade?.acs3 : dg.acs3;
 
-                      let draftMedia = 0;
-                      if (
-                        dg.acs1 !== undefined &&
-                        dg.acs2 !== undefined &&
-                        dg.acs3 !== undefined &&
-                        dg.apt !== undefined
-                      ) {
-                        draftMedia = (dg.acs1 + dg.acs2 + dg.acs3 + dg.apt) / 4;
-                      }
-
-                      let existingMediaAcs = 0;
-                      if (
-                        isLocked &&
-                        existingGrade.acs1 !== undefined &&
-                        existingGrade.acs2 !== undefined &&
-                        existingGrade.acs3 !== undefined
-                      ) {
-                        existingMediaAcs =
-                          (existingGrade.acs1 +
-                            existingGrade.acs2 +
-                            existingGrade.acs3) /
-                          3;
-                      }
-
-                      const finalMedia = isLocked
-                        ? existingGrade.media
-                        : draftMedia > 0
-                          ? draftMedia
+                      const acsArr = [acs1, acs2, acs3].filter(
+                        (v): v is number => v !== undefined && !isNaN(v),
+                      );
+                      const mediaAcs =
+                        acsArr.length > 0
+                          ? acsArr.reduce((a, b) => a + b, 0) / acsArr.length
                           : undefined;
+
+                      const trabalho1 = isLocked ? existingGrade?.trabalho1 : dg.trabalho1;
+                      const trabalho2 = isLocked ? existingGrade?.trabalho2 : dg.trabalho2;
+
+                      const trabArr = [trabalho1, trabalho2].filter(
+                        (v): v is number => v !== undefined && !isNaN(v),
+                      );
+                      const mediaTrabalho =
+                        trabArr.length > 0
+                          ? trabArr.reduce((a, b) => a + b, 0) / trabArr.length
+                          : undefined;
+
+                      const apt = isLocked ? existingGrade?.apt : dg.apt;
+
+                      // Calculation for Média Final
+                      let finalMedia: number | undefined = undefined;
+                      if (isLocked && existingGrade?.media !== undefined) {
+                        finalMedia = existingGrade.media;
+                      } else if (mediaAcs !== undefined && apt !== undefined) {
+                        if (mediaTrabalho !== undefined) {
+                          finalMedia = (mediaAcs + mediaTrabalho + apt) / 3;
+                        } else {
+                          finalMedia = (mediaAcs + apt) / 2;
+                        }
+                      }
+
                       const classficacao =
                         finalMedia !== undefined
                           ? finalMedia >= 9.5
@@ -627,20 +807,39 @@ export function TeacherDashboard() {
 
                       return (
                         <tr key={student.id} className="hover:bg-gray-50/50">
+                          {/* N/O */}
+                          <td className="px-2 py-3 whitespace-nowrap text-center text-xs font-bold text-gray-500 border-r border-gray-200">
+                            {index + 1}
+                          </td>
+
+                          {/* NOME COMPLETO */}
                           <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 border-r border-gray-200">
                             {student.name}
                           </td>
+
+                          {/* ACS1 */}
                           <td className="px-2 py-3 whitespace-nowrap text-center">
                             {isLocked ? (
-                              <span className="font-semibold text-gray-900">
-                                {existingGrade.acs1 ?? "-"}
+                              <span
+                                className={`font-bold text-sm ${
+                                  acs1 !== undefined && acs1 < 9.5
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {acs1 ?? "-"}
                               </span>
                             ) : (
                               <input
                                 type="number"
+                                step="0.01"
                                 min="0"
                                 max="20"
-                                className="w-14 text-center rounded-md border-gray-300 border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className={`w-14 min-w-[56px] text-center rounded-md border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500 font-bold ${
+                                  dg.acs1 !== undefined && dg.acs1 < 9.5
+                                    ? "text-red-600 bg-red-50 border-red-300"
+                                    : "text-slate-900 border-gray-300"
+                                }`}
                                 value={dg.acs1 ?? ""}
                                 onChange={(e) =>
                                   handleGradeChange(
@@ -652,17 +851,30 @@ export function TeacherDashboard() {
                               />
                             )}
                           </td>
+
+                          {/* ACS2 */}
                           <td className="px-2 py-3 whitespace-nowrap text-center">
                             {isLocked ? (
-                              <span className="font-semibold text-gray-900">
-                                {existingGrade.acs2 ?? "-"}
+                              <span
+                                className={`font-bold text-sm ${
+                                  acs2 !== undefined && acs2 < 9.5
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {acs2 ?? "-"}
                               </span>
                             ) : (
                               <input
                                 type="number"
+                                step="0.01"
                                 min="0"
                                 max="20"
-                                className="w-14 text-center rounded-md border-gray-300 border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className={`w-14 min-w-[56px] text-center rounded-md border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500 font-bold ${
+                                  dg.acs2 !== undefined && dg.acs2 < 9.5
+                                    ? "text-red-600 bg-red-50 border-red-300"
+                                    : "text-slate-900 border-gray-300"
+                                }`}
                                 value={dg.acs2 ?? ""}
                                 onChange={(e) =>
                                   handleGradeChange(
@@ -674,17 +886,30 @@ export function TeacherDashboard() {
                               />
                             )}
                           </td>
+
+                          {/* ACS3 */}
                           <td className="px-2 py-3 whitespace-nowrap text-center">
                             {isLocked ? (
-                              <span className="font-semibold text-gray-900">
-                                {existingGrade.acs3 ?? "-"}
+                              <span
+                                className={`font-bold text-sm ${
+                                  acs3 !== undefined && acs3 < 9.5
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {acs3 ?? "-"}
                               </span>
                             ) : (
                               <input
                                 type="number"
+                                step="0.01"
                                 min="0"
                                 max="20"
-                                className="w-14 text-center rounded-md border-gray-300 border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className={`w-14 min-w-[56px] text-center rounded-md border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500 font-bold ${
+                                  dg.acs3 !== undefined && dg.acs3 < 9.5
+                                    ? "text-red-600 bg-red-50 border-red-300"
+                                    : "text-slate-900 border-gray-300"
+                                }`}
                                 value={dg.acs3 ?? ""}
                                 onChange={(e) =>
                                   handleGradeChange(
@@ -696,28 +921,132 @@ export function TeacherDashboard() {
                               />
                             )}
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap text-center bg-gray-50 border-x border-gray-200">
-                            <span className="font-bold text-blue-900 text-sm">
-                              {isLocked
-                                ? existingMediaAcs.toFixed(1)
-                                : dg.acs1 !== undefined &&
-                                    dg.acs2 !== undefined &&
-                                    dg.acs3 !== undefined
-                                  ? draftMediaAcs.toFixed(1)
-                                  : "-"}
+
+                          {/* MEDIA ACS */}
+                          <td className="px-2 py-3 whitespace-nowrap text-center bg-blue-50/40 border-x border-gray-200">
+                            <span
+                              className={`font-bold text-sm ${
+                                mediaAcs !== undefined && mediaAcs < 9.5
+                                  ? "text-red-600"
+                                  : "text-slate-900"
+                              }`}
+                            >
+                              {mediaAcs !== undefined
+                                ? mediaAcs.toFixed(2).replace(".", ",")
+                                : "-"}
                             </span>
                           </td>
+
+                          {/* TRABALHO 1 */}
                           <td className="px-2 py-3 whitespace-nowrap text-center">
                             {isLocked ? (
-                              <span className="font-semibold text-gray-900">
-                                {existingGrade.apt ?? "-"}
+                              <span
+                                className={`font-bold text-sm ${
+                                  trabalho1 !== undefined && trabalho1 < 9.5
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {trabalho1 ?? "-"}
                               </span>
                             ) : (
                               <input
                                 type="number"
+                                step="0.01"
                                 min="0"
                                 max="20"
-                                className="w-14 text-center rounded-md border-gray-300 border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Opc"
+                                className={`w-14 min-w-[56px] text-center rounded-md border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500 font-bold ${
+                                  dg.trabalho1 !== undefined && dg.trabalho1 < 9.5
+                                    ? "text-red-600 bg-red-50 border-red-300"
+                                    : "text-slate-900 border-gray-300"
+                                }`}
+                                value={dg.trabalho1 ?? ""}
+                                onChange={(e) =>
+                                  handleGradeChange(
+                                    student.id,
+                                    "trabalho1",
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            )}
+                          </td>
+
+                          {/* TRABALHO 2 */}
+                          <td className="px-2 py-3 whitespace-nowrap text-center">
+                            {isLocked ? (
+                              <span
+                                className={`font-bold text-sm ${
+                                  trabalho2 !== undefined && trabalho2 < 9.5
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {trabalho2 ?? "-"}
+                              </span>
+                            ) : (
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="20"
+                                placeholder="Opc"
+                                className={`w-14 min-w-[56px] text-center rounded-md border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500 font-bold ${
+                                  dg.trabalho2 !== undefined && dg.trabalho2 < 9.5
+                                    ? "text-red-600 bg-red-50 border-red-300"
+                                    : "text-slate-900 border-gray-300"
+                                }`}
+                                value={dg.trabalho2 ?? ""}
+                                onChange={(e) =>
+                                  handleGradeChange(
+                                    student.id,
+                                    "trabalho2",
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            )}
+                          </td>
+
+                          {/* MEDIA DE TRAB */}
+                          <td className="px-2 py-3 whitespace-nowrap text-center bg-amber-50/40 border-x border-gray-200">
+                            <span
+                              className={`font-bold text-sm ${
+                                mediaTrabalho !== undefined && mediaTrabalho < 9.5
+                                  ? "text-red-600"
+                                  : "text-slate-900"
+                              }`}
+                            >
+                              {mediaTrabalho !== undefined
+                                ? mediaTrabalho.toFixed(2).replace(".", ",")
+                                : "-"}
+                            </span>
+                          </td>
+
+                          {/* APT */}
+                          <td className="px-2 py-3 whitespace-nowrap text-center">
+                            {isLocked ? (
+                              <span
+                                className={`font-bold text-sm ${
+                                  apt !== undefined && apt < 9.5
+                                    ? "text-red-600"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {apt ?? "-"}
+                              </span>
+                            ) : (
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="20"
+                                className={`w-14 min-w-[56px] text-center rounded-md border px-1 py-1 text-sm focus:border-blue-500 focus:ring-blue-500 font-bold ${
+                                  dg.apt !== undefined && dg.apt < 9.5
+                                    ? "text-red-600 bg-red-50 border-red-300"
+                                    : "text-slate-900 border-gray-300"
+                                }`}
                                 value={dg.apt ?? ""}
                                 onChange={(e) =>
                                   handleGradeChange(
@@ -729,12 +1058,31 @@ export function TeacherDashboard() {
                               />
                             )}
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap text-center bg-gray-50 border-x border-gray-200">
-                            <span className="font-bold text-blue-900 text-base">
+
+                          {/* MEDIA FINAL */}
+                          <td className="px-2 py-3 whitespace-nowrap text-center bg-gray-100 border-x border-gray-200">
+                            <span
+                              className={`font-bold text-base ${
+                                finalMedia !== undefined && finalMedia < 9.5
+                                  ? "text-red-600"
+                                  : "text-slate-900"
+                              }`}
+                            >
                               {finalMedia !== undefined
-                                ? finalMedia.toFixed(1)
+                                ? finalMedia.toFixed(2).replace(".", ",")
                                 : "-"}
                             </span>
+                          </td>
+                          <td className="px-2 py-3 whitespace-nowrap text-center text-xs font-bold bg-slate-50/50 border-r border-gray-200">
+                            {finalMedia !== undefined ? (
+                              finalMedia >= 14 ? (
+                                <span className="text-emerald-700">Exclt</span>
+                              ) : finalMedia >= 9.5 ? (
+                                <span className="text-blue-700">Bom</span>
+                              ) : (
+                                <span className="text-red-700">Mau</span>
+                              )
+                            ) : '-'}
                           </td>
                           <td className="px-2 py-3 whitespace-nowrap text-center text-xs font-bold">
                             {finalMedia !== undefined ? (
@@ -978,6 +1326,69 @@ export function TeacherDashboard() {
 
             {/* Exam Pauta Card */}
             <Card className="p-6">
+              {/* CABEÇALHO OFICIAL DA PAUTA DE EXAMES */}
+              <div className="bg-white border-2 border-gray-300 rounded-xl p-5 mb-6 shadow-sm pauta-print">
+                <div className="flex flex-col items-center text-center pb-4 border-b border-gray-200">
+                  <img
+                    src={MOZAMBIQUE_LOGO_URL}
+                    alt="Emblema da República de Moçambique"
+                    className="h-12 w-12 object-contain mb-1.5 mx-auto"
+                    referrerPolicy="no-referrer"
+                  />
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-gray-800">
+                    REPÚBLICA DE MOÇAMBIQUE
+                  </h4>
+                  <h5 className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+                    MINISTÉRIO DA EDUCAÇÃO E DESENVOLVIMENTO HUMANO
+                  </h5>
+                  <p className="text-sm font-extrabold text-blue-900 mt-0.5 uppercase">
+                    {school?.name || "ESCOLA SECUNDÁRIA GERAL"}
+                  </p>
+                  <div className="mt-2 inline-block bg-purple-900 text-white text-xs font-bold uppercase tracking-wider px-4 py-1 rounded-md shadow-sm">
+                    PAUTA DE EXAMES — CLASSIFICAÇÃO FINAL
+                  </div>
+                </div>
+
+                {/* Grid do Cabeçalho com Nome do Docente e da Cadeira */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 text-xs">
+                  <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                    <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                      DOCENTE / PROFESSOR
+                    </span>
+                    <span className="font-extrabold text-gray-900 text-sm block truncate">
+                      {currentUser?.name || "Não especificado"}
+                    </span>
+                  </div>
+
+                  <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                    <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                      CADEIRA / DISCIPLINA
+                    </span>
+                    <span className="font-extrabold text-blue-800 text-sm block truncate">
+                      {subject?.name || "Não especificada"}
+                    </span>
+                  </div>
+
+                  <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                    <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                      TURMA E CLASSE
+                    </span>
+                    <span className="font-extrabold text-gray-900 text-sm block truncate">
+                      {turma?.gradeLevel || "10ª"} • {turma?.name || "Turma A"}
+                    </span>
+                  </div>
+
+                  <div className="bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                    <span className="block text-gray-500 font-semibold text-[10px] uppercase tracking-wider">
+                      ANO LECTIVO / PERÍODO
+                    </span>
+                    <span className="font-extrabold text-gray-900 text-sm block truncate">
+                      {new Date().getFullYear()} • {turma?.period || "Manhã"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -992,18 +1403,25 @@ export function TeacherDashboard() {
 
                 <div className="flex items-center gap-2">
                   <Button
+                    onClick={() => window.print()}
+                    variant="outline"
+                    className="text-xs gap-1.5 h-9 border-gray-300 text-gray-700 hover:bg-gray-50"
+                  >
+                    <FileText className="h-4 w-4" /> Imprimir Pauta Exames
+                  </Button>
+                  <Button
                     id="btn-lancar-todos-exames"
                     onClick={handleLaunchAllExamGrades}
                     className="bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-4 rounded-md shadow-sm gap-2"
                   >
                     <CheckCheck className="h-4 w-4" />
-                    Lançar Todas as Notas Preenchidas
+                    Lançar Todas as Notas & Dispensas
                   </Button>
                 </div>
               </div>
 
               {/* Table of students for exam launching */}
-              <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+              <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm pauta-print">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-100/70 text-gray-700">
                     <tr>
@@ -1075,26 +1493,33 @@ export function TeacherDashboard() {
 
                         // Real-time calculation of CF
                         let activeNE = isLocked
-                          ? existingExamGrade.notaExame
-                          : draftNE;
+                          ? (existingExamGrade.resultado === "Dispensado" ? "DISPENSADO" : existingExamGrade.notaExame)
+                          : admission.isDispensado
+                            ? "DISPENSADO"
+                            : draftNE;
+
                         let activeCF = isLocked
                           ? existingExamGrade.classificacaoFinal
-                          : draftNE !== undefined
-                            ? Math.round(mf * 0.4 + draftNE * 0.6)
-                            : undefined;
+                          : admission.isDispensado
+                            ? mf
+                            : draftNE !== undefined
+                              ? Math.round(mf * 0.4 + draftNE * 0.6)
+                              : undefined;
 
                         let activeResultado = isLocked
                           ? existingExamGrade.resultado
-                          : activeCF !== undefined
-                            ? activeCF >= 9.5
-                              ? "Aprovado"
-                              : "Reprovado"
-                            : undefined;
+                          : admission.isDispensado
+                            ? "Dispensado"
+                            : activeCF !== undefined
+                              ? activeCF >= 9.5
+                                ? "Aprovado"
+                                : "Reprovado"
+                              : undefined;
 
                         return (
                           <tr
                             key={student.id}
-                            className={`hover:bg-gray-50/70 transition-colors ${!admission.canTakeExam ? "bg-red-50/10" : ""}`}
+                            className={`hover:bg-gray-50/70 transition-colors ${!admission.canTakeExam && !admission.isDispensado ? "bg-red-50/10" : ""}`}
                           >
                             <td className="px-3 py-3 whitespace-nowrap text-center text-xs font-bold text-gray-600 border-r border-gray-200">
                               {idx + 1}
@@ -1102,7 +1527,7 @@ export function TeacherDashboard() {
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 border-r border-gray-200">
                               {student.name}
                             </td>
-                            <td className="px-3 py-3 whitespace-nowrap text-center text-sm font-bold text-blue-900 bg-blue-50/30 border-r border-gray-200">
+                            <td className={`px-3 py-3 whitespace-nowrap text-center text-sm font-bold bg-blue-50/30 border-r border-gray-200 ${mf < 9.5 ? 'text-red-600' : 'text-blue-900'}`}>
                               {mf.toFixed(1)}
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap text-center border-r border-gray-200">
@@ -1114,9 +1539,18 @@ export function TeacherDashboard() {
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap text-center bg-yellow-50/30 border-r border-gray-200">
                               {isLocked ? (
-                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-green-100 text-green-900 font-bold text-sm">
-                                  <Lock className="h-3.5 w-3.5 text-green-700" />
-                                  <span>{existingExamGrade.notaExame}</span>
+                                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded font-bold text-sm ${
+                                  existingExamGrade.resultado === "Dispensado"
+                                    ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                    : existingExamGrade.notaExame < 9.5 ? 'bg-red-100 text-red-900' : 'bg-green-100 text-green-900'
+                                }`}>
+                                  <Lock className="h-3.5 w-3.5 text-gray-700" />
+                                  <span>{existingExamGrade.resultado === "Dispensado" ? "DISPENSADO" : existingExamGrade.notaExame}</span>
+                                </div>
+                              ) : admission.isDispensado ? (
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-900 font-extrabold text-xs rounded-md border border-blue-300 shadow-sm cursor-not-allowed select-none">
+                                  <Lock className="h-3.5 w-3.5 text-blue-700" />
+                                  <span>DISPENSADO</span>
                                 </div>
                               ) : admission.canTakeExam ? (
                                 <input
@@ -1133,7 +1567,9 @@ export function TeacherDashboard() {
                                       e.target.value,
                                     )
                                   }
-                                  className="w-24 text-center font-bold text-sm rounded-md border-gray-300 border py-1.5 px-2 focus:border-blue-500 focus:ring-blue-500 shadow-sm"
+                                  className={`w-24 text-center font-bold text-sm rounded-md border py-1.5 px-2 focus:border-blue-500 focus:ring-blue-500 shadow-sm ${
+                                    draftNE !== undefined && draftNE < 9.5 ? 'text-red-600 bg-red-50 border-red-300' : 'text-slate-900 border-gray-300'
+                                  }`}
                                 />
                               ) : (
                                 <span className="text-xs text-red-500 italic font-medium">
@@ -1142,7 +1578,7 @@ export function TeacherDashboard() {
                               )}
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap text-center bg-gray-50 border-r border-gray-200">
-                              <span className="font-extrabold text-sm text-gray-900">
+                              <span className={`font-extrabold text-sm ${activeCF !== undefined && activeCF < 9.5 ? 'text-red-600' : 'text-slate-900'}`}>
                                 {activeCF !== undefined ? activeCF : "-"}
                               </span>
                             </td>
@@ -1150,9 +1586,11 @@ export function TeacherDashboard() {
                               {activeResultado ? (
                                 <span
                                   className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
-                                    activeResultado === "Aprovado"
-                                      ? "bg-green-100 text-green-800"
-                                      : "bg-red-100 text-red-800"
+                                    activeResultado === "Dispensado"
+                                      ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                      : activeResultado === "Aprovado"
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-red-100 text-red-800"
                                   }`}
                                 >
                                   {activeResultado}
@@ -1172,6 +1610,16 @@ export function TeacherDashboard() {
                                     Copiada na Pauta Geral
                                   </span>
                                 </div>
+                              ) : admission.isDispensado ? (
+                                <Button
+                                  id={`btn-lancar-${student.id}`}
+                                  onClick={() =>
+                                    handleLaunchExamGrade(student.id)
+                                  }
+                                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1.5 px-3 rounded-md shadow-sm gap-1.5 font-medium"
+                                >
+                                  <CheckCircle className="h-3.5 w-3.5" /> Confirmar Dispensa
+                                </Button>
                               ) : (
                                 <Button
                                   id={`btn-lancar-${student.id}`}
@@ -1298,6 +1746,10 @@ export function TeacherDashboard() {
           renderMainContent()
         ) : activeTab === "calendar" ? (
           <AcademicCalendarComponent />
+        ) : activeTab === "signature" ? (
+          <SignatureManager />
+        ) : activeTab === "messages" || activeTab === "chat" ? (
+          <OfficialMessages />
         ) : (
           <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
             <div className="flex flex-col items-center justify-center text-center py-32 bg-white rounded-3xl border border-slate-200 shadow-sm">

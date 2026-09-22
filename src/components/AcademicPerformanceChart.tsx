@@ -332,7 +332,7 @@ export const AcademicPerformanceChart: React.FC = () => {
                   <td className="border border-black p-1.5 font-bold">{cls.name}</td>
                   <td className="border border-black p-1.5">{cls.gradeLevel}</td>
                   <td className="border border-black p-1.5 text-center">{cls.alunos}</td>
-                  <td className="border border-black p-1.5 text-center font-bold">{cls.media}</td>
+                  <td className={`border border-black p-1.5 text-center font-bold ${cls.media < 9.5 ? 'text-red-600' : 'text-black'}`}>{cls.media}</td>
                   <td className="border border-black p-1.5 text-center">{cls.aproveitamento}%</td>
                 </tr>
               ))}
@@ -354,7 +354,7 @@ export const AcademicPerformanceChart: React.FC = () => {
               {subjectData.map((sub, idx) => (
                 <tr key={idx}>
                   <td className="border border-black p-1.5 font-bold">{sub.name}</td>
-                  <td className="border border-black p-1.5 text-center">{sub.media}</td>
+                  <td className={`border border-black p-1.5 text-center font-bold ${sub.media < 9.5 ? 'text-red-600' : 'text-black'}`}>{sub.media}</td>
                   <td className="border border-black p-1.5 text-center">{sub.aproveitamento}%</td>
                 </tr>
               ))}

@@ -41,6 +41,20 @@ export function isLaboralPeriod(period?: string | null): boolean {
   return true;
 }
 
+/**
+ * Checks if a class is an Exam class (3ª, 6ª, 9ª e 12ª Classe) vs Non-Exam class (1ª, 2ª, 4ª, 5ª, 7ª, 8ª, 10ª, 11ª Classe)
+ */
+export function isExamGradeLevel(gradeLevel?: string | null): boolean {
+  if (!gradeLevel) return false;
+  const g = gradeLevel.toLowerCase();
+  const match = g.match(/(\d+)/);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    return num === 3 || num === 6 || num === 9 || num === 12;
+  }
+  return g.includes('3') || g.includes('6') || g.includes('9') || g.includes('12');
+}
+
 export interface StudentPautaData {
   student: Student;
   classObj?: Class;
@@ -48,7 +62,7 @@ export interface StudentPautaData {
   frequencyNumber: number; // Nº FREQU. - Fixo por ano letivo durante a frequência (não substituível)
   pautaNumber: number | null; // Nº PAUT - Apenas para alunos admitidos ao exame (1, 2, 3...)
   isAdmittedToExam: boolean;
-  finalStatus: 'ADMITIDO' | 'DISPENSADO' | 'EXCLUÍDO';
+  finalStatus: 'ADMITIDO' | 'DISPENSADO' | 'EXCLUÍDO' | 'TRANSITA' | 'NÃO TRANSITA';
   periodType: 'LABORAL' | 'POS_LABORAL';
   juriNumber: number | null; // Júri composto por 30 alunos (Júri 01, Júri 02...)
   mfOverall: number | null; // Média de Frequência Geral
@@ -114,25 +128,53 @@ export function buildOfficialPautaRoster(
   allClasses.forEach(cls => {
     const classStudents = allStudents
       .filter(s => s.classId === cls.id)
-      .sort((a, b) => (a.frequencyNumber ?? 0) - (b.frequencyNumber ?? 0) || a.name.localeCompare(b.name, 'pt-PT'));
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-PT', { sensitivity: 'base' }));
 
     const isLaboral = isLaboralPeriod(cls.period);
 
     classStudents.forEach((st, idx) => {
       const fixedFreqNumber = st.frequencyNumber ?? (idx + 1);
-      const mf = calculateStudentMF(st.id, allGrades, subjectIds);
       
-      // Determination of final status according to standard Mozambican examination regulations:
-      // MF >= 13.5 -> Dispensado
-      // 9.5 <= MF < 13.5 -> Admitido ao exame
-      // MF < 9.5 -> Excluído
-      let status: 'ADMITIDO' | 'DISPENSADO' | 'EXCLUÍDO' = 'ADMITIDO';
+      // Calculate individual subject final grades and check for failing subjects
+      let hasFailingSubject = false;
+      const subjectFinalGrades: number[] = [];
+
+      subjectIds.forEach(subId => {
+        const t1 = allGrades.find(g => g.studentId === st.id && g.subjectId === subId && g.trimester === 1)?.media;
+        const t2 = allGrades.find(g => g.studentId === st.id && g.subjectId === subId && g.trimester === 2)?.media;
+        const t3 = allGrades.find(g => g.studentId === st.id && g.subjectId === subId && g.trimester === 3)?.media;
+        
+        const valid = [t1, t2, t3].filter((v): v is number => v !== undefined && v !== null);
+        if (valid.length > 0) {
+          const avg = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+          subjectFinalGrades.push(avg);
+          if (avg < 9.5) {
+            hasFailingSubject = true;
+          }
+        }
+      });
+
+      const mf = subjectFinalGrades.length > 0 
+        ? Math.round(subjectFinalGrades.reduce((a, b) => a + b, 0) / subjectFinalGrades.length) 
+        : null;
+      
+      // Determination of final status according to Mozambican regulations:
+      // Student TRANSITA/ADMITIDO only if ALL subjects >= 9.5 and overall MF >= 9.5
+      // If ANY subject < 9.5 -> Não transita / Excluído
+      const isExamClass = isExamGradeLevel(cls.gradeLevel);
+
+      let status: 'ADMITIDO' | 'DISPENSADO' | 'EXCLUÍDO' | 'TRANSITA' | 'NÃO TRANSITA' = isExamClass ? 'ADMITIDO' : 'TRANSITA';
       if (mf !== null) {
-        if (mf >= 13.5) status = 'DISPENSADO';
-        else if (mf < 9.5) status = 'EXCLUÍDO';
-        else status = 'ADMITIDO';
-      } else {
-        status = 'ADMITIDO';
+        if (hasFailingSubject || mf < 9.5) {
+          status = isExamClass ? 'EXCLUÍDO' : 'NÃO TRANSITA';
+        } else {
+          if (isExamClass) {
+            if (mf >= 13.5) status = 'DISPENSADO';
+            else status = 'ADMITIDO';
+          } else {
+            status = 'TRANSITA';
+          }
+        }
       }
 
       studentMap.set(st.id, {
@@ -141,7 +183,7 @@ export function buildOfficialPautaRoster(
         turmaAbrev: formatTurmaAbrev(cls),
         frequencyNumber: fixedFreqNumber,
         pautaNumber: null, // Will be assigned only to admitted students below
-        isAdmittedToExam: status === 'ADMITIDO',
+        isAdmittedToExam: isExamClass && status === 'ADMITIDO',
         finalStatus: status,
         periodType: isLaboral ? 'LABORAL' : 'POS_LABORAL',
         juriNumber: null,

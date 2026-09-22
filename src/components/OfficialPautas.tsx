@@ -2,12 +2,19 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../store';
 import { Printer, ZoomIn, ZoomOut, Info, Filter, Users, Award, CheckCircle2 } from 'lucide-react';
 import { Button } from './ui';
+import { SignatureBox } from './SignatureBox';
 import { 
   buildOfficialPautaRoster, 
   formatTurmaAbrev, 
   isLaboralPeriod, 
+  isExamGradeLevel,
   StudentPautaData 
 } from '../utils/pautaCalculations';
+import { 
+  formatGradeValue, 
+  isGradeNegative, 
+  getGradeTextColorClass 
+} from '../utils/gradeUtils';
 
 // Official Republic of Mozambique Coat of Arms Logo URL provided by user
 export const MOZAMBIQUE_LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQua66hW5lOO75LXVLwiJWQJKtgoRJzX58EUSAAc2QdYQ&s=10";
@@ -44,6 +51,49 @@ interface OfficialPautaProps {
   type: 'frequencia' | 'exame';
   selectedTurma?: string;
 }
+
+const fmtGradeVal = (val: number | null | undefined): string => formatGradeValue(val);
+
+const renderPautaGradeCell = (
+  val: number | null | undefined,
+  options?: {
+    isBold?: boolean;
+    bgClass?: string;
+    extraClass?: string;
+    title?: string;
+    customTextColor?: string;
+    forceInteger?: boolean;
+  }
+) => {
+  if (val === null || val === undefined || isNaN(val)) {
+    return (
+      <td className={`min-w-[60px] w-[60px] p-0 ${options?.bgClass || ''} ${options?.extraClass || ''}`}>
+        <div className="min-w-[60px] w-full flex items-center justify-center text-center whitespace-nowrap text-[10px] py-1"></div>
+      </td>
+    );
+  }
+
+  const effectiveVal = options?.forceInteger ? Math.round(val) : val;
+  const isNegative = isGradeNegative(effectiveVal);
+  const formattedText = formatGradeValue(effectiveVal, options?.forceInteger);
+
+  // Dynamic text color
+  let textColorClass = options?.customTextColor;
+  if (!textColorClass || isNegative) {
+    textColorClass = getGradeTextColorClass(effectiveVal, options?.isBold, options?.customTextColor);
+  }
+
+  return (
+    <td
+      className={`min-w-[60px] w-[60px] p-0 ${options?.bgClass || ''} ${options?.extraClass || ''} text-center whitespace-nowrap`}
+      title={options?.title}
+    >
+      <div className={`min-w-[60px] w-full flex items-center justify-center text-center whitespace-nowrap text-[10px] px-1 py-1 ${textColorClass}`}>
+        {formattedText}
+      </div>
+    </td>
+  );
+};
 
 export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurma }) => {
   const { students, classes, subjects, grades, examGrades, schools } = useStore();
@@ -103,6 +153,8 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
 
   // Determine current active class context
   const currentClass = classes.find(c => c.id === (localTurmaFilter !== 'all' ? localTurmaFilter : selectedTurma)) || classes[0];
+  const gradeLevelStr = currentClass?.gradeLevel || '';
+  const hasExams = isExamGradeLevel(gradeLevelStr);
 
   // Filter roster according to UI options
   const displayRows = useMemo(() => {
@@ -143,12 +195,12 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
         return (a.pautaNumber ?? 0) - (b.pautaNumber ?? 0);
       });
     } else {
-      // Frequência: sorted by permanent frequency number in class
+      // Frequência: sorted strictly by student name in alphabetical order
       result.sort((a, b) => {
         if (a.classObj?.id !== b.classObj?.id) {
-          return (a.classObj?.name || '').localeCompare(b.classObj?.name || '');
+          return (a.classObj?.name || '').localeCompare(b.classObj?.name || '', 'pt-PT');
         }
-        return a.frequencyNumber - b.frequencyNumber;
+        return a.student.name.localeCompare(b.student.name, 'pt-PT', { sensitivity: 'base' });
       });
     }
 
@@ -321,47 +373,71 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
         </div>
       </div>
 
-      {/* PAUTA CONTAINER */}
-      <div 
-        id="pauta-container" 
-        className="bg-white border-2 border-black p-4 shadow-xl overflow-x-auto custom-pauta-scrollbar"
-        style={{ transformOrigin: 'top left' }}
-      >
-        <style dangerouslySetInnerHTML={{__html: `
-          @media print {
-            @page { size: A3 landscape; margin: 4mm; }
-            body * { visibility: hidden; }
-            #pauta-container, #pauta-container * { visibility: visible; }
-            #pauta-container { 
-              position: absolute; 
-              left: 0; 
-              top: 0; 
-              width: 100% !important; 
-              margin: 0 !important; 
-              padding: 0 !important; 
-              border: none !important;
-              box-shadow: none !important; 
+      {/* RESPONSIVE PAUTA WRAPPER WITH INDEPENDENT HORIZONTAL SCROLLING */}
+      <div className="w-full overflow-x-auto rounded-xl border border-gray-300 bg-slate-100/70 p-2.5 shadow-inner custom-pauta-scrollbar relative touch-pan-x">
+        {/* PAUTA CONTAINER */}
+        <div 
+          id="pauta-container" 
+          className="bg-white border-2 border-black p-4 shadow-xl min-w-max mx-auto"
+          style={{ transformOrigin: 'top left', transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined }}
+        >
+          <style dangerouslySetInnerHTML={{__html: `
+            .custom-pauta-scrollbar::-webkit-scrollbar {
+              height: 12px;
+              width: 12px;
             }
-            .no-print { display: none !important; }
-            .pauta-official-table { width: 100% !important; font-size: 8px !important; }
-            .pauta-official-table th, .pauta-official-table td { padding: 1px 2px !important; }
-          }
+            .custom-pauta-scrollbar::-webkit-scrollbar-track {
+              background: #e2e8f0;
+              border-radius: 8px;
+            }
+            .custom-pauta-scrollbar::-webkit-scrollbar-thumb {
+              background: #64748b;
+              border-radius: 8px;
+              border: 2.5px solid #e2e8f0;
+            }
+            .custom-pauta-scrollbar::-webkit-scrollbar-thumb:hover {
+              background: #334155;
+            }
 
-          .pauta-official-table {
-            border-collapse: collapse;
-            border: 2.5px solid black;
-            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
-            text-transform: uppercase;
-            font-weight: 700;
-            line-height: 1.1;
-          }
+            @media print {
+              @page { size: A3 landscape; margin: 4mm; }
+              body * { visibility: hidden; }
+              #pauta-container, #pauta-container * { visibility: visible; }
+              #pauta-container { 
+                position: absolute; 
+                left: 0; 
+                top: 0; 
+                width: 100% !important; 
+                margin: 0 !important; 
+                padding: 0 !important; 
+                border: none !important;
+                box-shadow: none !important; 
+                transform: none !important;
+              }
+              .no-print { display: none !important; }
+              .pauta-official-table { width: 100% !important; font-size: 8px !important; }
+              .pauta-official-table th, .pauta-official-table td { padding: 1px 2px !important; }
+            }
+
+            .pauta-official-table {
+              border-collapse: collapse;
+              border: 2.5px solid black;
+              font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+              text-transform: uppercase;
+              font-weight: 700;
+              line-height: 1.1;
+              min-width: max-content;
+              table-layout: auto;
+            }
 
           .pauta-official-table th, .pauta-official-table td {
             border: 1.5px solid black;
             padding: 2px 3px;
             text-align: center;
-            font-size: 11px;
+            font-size: 10px;
             color: #000000;
+            white-space: nowrap;
+            min-width: 32px;
           }
 
           .pauta-v-text {
@@ -372,9 +448,9 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
             font-weight: 800;
             padding: 4px 2px;
             height: 90px;
-            width: 28px;
-            min-width: 28px;
-            max-width: 28px;
+            width: 32px;
+            min-width: 32px;
+            max-width: 34px;
             vertical-align: middle;
             text-align: center;
           }
@@ -387,9 +463,9 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
             font-weight: 800;
             padding: 2px 1px;
             height: 80px;
-            width: 22px;
-            min-width: 22px;
-            max-width: 22px;
+            width: 30px;
+            min-width: 30px;
+            max-width: 32px;
             font-size: 9.5px;
             vertical-align: middle;
             text-align: center;
@@ -416,7 +492,10 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
         {/* DOCUMENT HEADER: PAUTA DE EXAME */}
         {/* ------------------------------------------------------------- */}
         {type === 'exame' && (
-          <div className="text-center font-sans mb-3 pb-2 border-b-2 border-black">
+          <div className="text-center font-sans mb-3 pb-2 border-b-2 border-black relative">
+            <div className="absolute top-2 right-2">
+              <SignatureBox label="O Director da Escola" />
+            </div>
             {/* Mozambican Emblem */}
             <div className="flex justify-center mb-1">
               <MozambiqueEmblem className="h-16 w-16" />
@@ -434,7 +513,7 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
             <h3 className="text-xs font-semibold uppercase tracking-wide text-black mt-0.5">
               {currentSchool.district}
             </h3>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-black mt-0.5">
+            <h3 className="text-[16px] font-extrabold uppercase tracking-wide text-black mt-1 bg-amber-100/90 px-3 py-1 inline-block rounded border border-black/30 shadow-xs">
               {currentSchool.name}
             </h3>
             
@@ -467,6 +546,10 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
                 </span>
               </div>
               <div className="flex items-center gap-1">
+                <span>Horário</span>
+                <span className="px-2 font-black underline bg-amber-100/80 rounded border border-amber-300">12:00 DA MANHÃ</span>
+              </div>
+              <div className="flex items-center gap-1">
                 <span>Turma</span>
                 <span className="px-2 font-black underline">
                   {localTurmaFilter !== 'all' ? formatTurmaAbrev(currentClass) : 'GERAL'}
@@ -480,7 +563,10 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
         {/* DOCUMENT HEADER: PAUTA DE FREQUÊNCIA */}
         {/* ------------------------------------------------------------- */}
         {type === 'frequencia' && (
-          <div className="text-center font-sans mb-3 pb-2 border-b-2 border-black">
+          <div className="text-center font-sans mb-3 pb-2 border-b-2 border-black relative">
+            <div className="absolute top-2 right-2">
+              <SignatureBox label="O Director da Escola" />
+            </div>
             <div className="flex justify-center mb-1">
               <MozambiqueEmblem className="h-14 w-14" />
             </div>
@@ -496,7 +582,7 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
             <h3 className="text-xs font-semibold uppercase tracking-wide text-black mt-0.5">
               {currentSchool.district}
             </h3>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-black mt-0.5">
+            <h3 className="text-[16px] font-extrabold uppercase tracking-wide text-black mt-1 bg-amber-100/90 px-3 py-1 inline-block rounded border border-black/30 shadow-xs">
               {currentSchool.name}
             </h3>
             <h4 className="text-xl font-black uppercase tracking-tight text-black mt-1 font-serif">
@@ -504,6 +590,7 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
             </h4>
             <div className="flex flex-wrap items-center justify-center gap-4 mt-1 text-xs font-bold text-black">
               <span>PERÍODO: {type === 'frequencia' ? '1º TRIMESTRE' : 'EXAME'}</span>
+              <span className="bg-amber-100/80 px-2 py-0.5 rounded border border-amber-300">HORÁRIO: 12:00 DA MANHÃ</span>
               <span>ANO LECTIVO: {currentClass?.year || '2024'}</span>
               <span>CLASSE: {currentClass?.gradeLevel || '10ª Classe'}</span>
               <span>TURMA: {localTurmaFilter !== 'all' ? `${formatTurmaAbrev(currentClass)} (${currentClass.name})` : 'TODAS AS TURMAS'}</span>
@@ -522,9 +609,6 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
                 <tr className="bg-white">
                   <th rowSpan={3} className="pauta-v-text" title="Número fixo de identificação por ano letivo durante a frequência nas aulas (não substituível)">
                     Nº FREQU.
-                  </th>
-                  <th rowSpan={3} className="pauta-v-text" title="Número único atribuído aos alunos admitidos aos exames, começando em 1">
-                    Nº PAUT
                   </th>
                   <th rowSpan={3} className="pauta-v-text" title="Turma abreviada: ex: T/A=TURMA A">
                     TURMA
@@ -628,16 +712,24 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
                   const mcnAvg = getSectionAverage(student.id, 'MCN');
                   const aptpAvg = getSectionAverage(student.id, 'APTP');
 
+                  const ccsHasFail = activeSubjects.filter(s => s.area === 'CS').some(s => {
+                    const mf = getSubjectFinalGrade(student.id, s.id);
+                    return mf !== null && mf < 9.5;
+                  });
+                  const mcnHasFail = activeSubjects.filter(s => s.area === 'MCN').some(s => {
+                    const mf = getSubjectFinalGrade(student.id, s.id);
+                    return mf !== null && mf < 9.5;
+                  });
+                  const aptpHasFail = activeSubjects.filter(s => s.area === 'APTP').some(s => {
+                    const mf = getSubjectFinalGrade(student.id, s.id);
+                    return mf !== null && mf < 9.5;
+                  });
+
                   return (
                     <tr key={student.id} className="hover:bg-yellow-50/50">
                       {/* Nº FREQUÊNCIA: permanente por ano letivo */}
                       <td className="font-bold text-gray-900 bg-gray-50/60" title="Nº de Frequência na Turma (não substituível)">
                         {row.frequencyNumber}
-                      </td>
-
-                      {/* Nº PAUTA: único atribuído a alunos admitidos ao exame */}
-                      <td className="font-extrabold text-blue-900" title="Nº de Pauta para Exame (inicia em 1 para admitidos)">
-                        {row.pautaNumber !== null ? row.pautaNumber : '-'}
                       </td>
 
                       {/* TURMA ABREVIADA (ex: T/A, T/B, T/C) */}
@@ -661,51 +753,75 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
 
                         return (
                           <React.Fragment key={sub.id}>
-                            <td className={`font-semibold ${n1 !== null && n1 < 9.5 ? 'text-red-600' : 'text-black'}`}>{n1 ?? ''}</td>
-                            <td className={`font-semibold ${n2 !== null && n2 < 9.5 ? 'text-red-600' : 'text-black'}`}>{n2 ?? ''}</td>
-                            <td className={`font-semibold ${n3 !== null && n3 < 9.5 ? 'text-red-600' : 'text-black'}`}>{n3 ?? ''}</td>
-                            <td className={`font-black bg-gray-50/60 ${mf !== null && mf < 9.5 ? 'text-red-600' : 'text-black'}`}>{mf ?? ''}</td>
-                            {/* M.CICLO = M.FREQ */}
-                            <td className={`font-black bg-blue-50/40 ${mc !== null && mc < 9.5 ? 'text-red-600' : 'text-black'}`} title="M.CICLO = M.FREQ">
-                              {mc ?? ''}
-                            </td>
+                            {renderPautaGradeCell(n1)}
+                            {renderPautaGradeCell(n2)}
+                            {renderPautaGradeCell(n3)}
+                            {renderPautaGradeCell(mf, { isBold: true, bgClass: 'bg-gray-50/60', forceInteger: true })}
+                            {renderPautaGradeCell(mc, { isBold: true, bgClass: 'bg-blue-50/40', title: 'M.CICLO = M.FREQ', forceInteger: true })}
                           </React.Fragment>
                         );
                       })}
 
                       {/* Comportamento (1º, 2º, 3º) */}
-                      <td className="text-[10px] font-bold text-black">B</td>
-                      <td className="text-[10px] font-bold text-black">B</td>
-                      <td className="text-[10px] font-bold text-black">B</td>
+                      <td className="text-[10px] font-bold text-center">
+                        {row.finalStatus === 'DISPENSADO' ? <span className="text-emerald-700">Exclt</span> : row.finalStatus === 'EXCLUÍDO' || row.finalStatus === 'NÃO TRANSITA' ? <span className="text-red-700">Sufi</span> : <span className="text-blue-700">Bom</span>}
+                      </td>
+                      <td className="text-[10px] font-bold text-center">
+                        {row.finalStatus === 'DISPENSADO' ? <span className="text-emerald-700">Exclt</span> : row.finalStatus === 'EXCLUÍDO' || row.finalStatus === 'NÃO TRANSITA' ? <span className="text-red-700">Sufi</span> : <span className="text-blue-700">Bom</span>}
+                      </td>
+                      <td className="text-[10px] font-bold text-center">
+                        {row.finalStatus === 'DISPENSADO' ? <span className="text-emerald-700">Exclt</span> : row.finalStatus === 'EXCLUÍDO' || row.finalStatus === 'NÃO TRANSITA' ? <span className="text-red-700">Sufi</span> : <span className="text-blue-700">Bom</span>}
+                      </td>
 
                       {/* Média Trimestre (1º, 2º, 3º) */}
-                      <td className="font-bold text-[10px] text-black">{t1Avg ?? ''}</td>
-                      <td className="font-bold text-[10px] text-black">{t2Avg ?? ''}</td>
-                      <td className="font-bold text-[10px] text-black">{t3Avg ?? ''}</td>
+                      {renderPautaGradeCell(t1Avg, { isBold: true, forceInteger: true })}
+                      {renderPautaGradeCell(t2Avg, { isBold: true, forceInteger: true })}
+                      {renderPautaGradeCell(t3Avg, { isBold: true, forceInteger: true })}
 
                       {/* M. GERAL POR SECÇÃO */}
-                      <td className="font-bold text-[10px] bg-blue-50/40 text-black">{ccsAvg ?? ''}</td>
-                      <td className="font-bold text-[10px] bg-blue-50/40 text-black">{mcnAvg ?? ''}</td>
-                      <td className="font-bold text-[10px] bg-blue-50/40 text-black">{aptpAvg ?? ''}</td>
-                      <td className="font-black text-[11px] bg-blue-100/60 text-blue-950">{mfAvg ?? ''}</td>
+                      {renderPautaGradeCell(ccsAvg, { isBold: true, bgClass: 'bg-blue-50/40', forceInteger: true })}
+                      {renderPautaGradeCell(mcnAvg, { isBold: true, bgClass: 'bg-blue-50/40', forceInteger: true })}
+                      {renderPautaGradeCell(aptpAvg, { isBold: true, bgClass: 'bg-blue-50/40', forceInteger: true })}
+                      {renderPautaGradeCell(mfAvg, { isBold: true, bgClass: 'bg-blue-100/60', customTextColor: 'text-blue-950', forceInteger: true })}
 
                       {/* Section Status (CCS, MCN, APTP) */}
-                      <td className="text-[10px] font-bold text-center text-black">
-                        {ccsAvg && ccsAvg >= 9.5 ? 'APTO' : 'N/APTO'}
+                      <td className="text-[10px] font-bold text-center">
+                        {ccsAvg !== null ? (
+                          hasExams ? (
+                            ccsAvg >= 13.5 && !ccsHasFail ? <span className="text-emerald-700">Dispensado</span> : ccsAvg >= 9.5 && !ccsHasFail ? <span className="text-blue-700">Admitido</span> : <span className="text-red-700">Excluído</span>
+                          ) : (
+                            ccsAvg >= 9.5 && !ccsHasFail ? <span className="text-blue-700">Transita</span> : <span className="text-red-700">Não transita</span>
+                          )
+                        ) : '-'}
                       </td>
-                      <td className="text-[10px] font-bold text-center text-black">
-                        {mcnAvg && mcnAvg >= 9.5 ? 'APTO' : 'N/APTO'}
+                      <td className="text-[10px] font-bold text-center">
+                        {mcnAvg !== null ? (
+                          hasExams ? (
+                            mcnAvg >= 13.5 && !mcnHasFail ? <span className="text-emerald-700">Dispensado</span> : mcnAvg >= 9.5 && !mcnHasFail ? <span className="text-blue-700">Admitido</span> : <span className="text-red-700">Excluído</span>
+                          ) : (
+                            mcnAvg >= 9.5 && !mcnHasFail ? <span className="text-blue-700">Transita</span> : <span className="text-red-700">Não transita</span>
+                          )
+                        ) : '-'}
                       </td>
-                      <td className="text-[10px] font-bold text-center text-black">
-                        {aptpAvg && aptpAvg >= 9.5 ? 'APTO' : 'N/APTO'}
+                      <td className="text-[10px] font-bold text-center">
+                        {aptpAvg !== null ? (
+                          hasExams ? (
+                            aptpAvg >= 13.5 && !aptpHasFail ? <span className="text-emerald-700">Dispensado</span> : aptpAvg >= 9.5 && !aptpHasFail ? <span className="text-blue-700">Admitido</span> : <span className="text-red-700">Excluído</span>
+                          ) : (
+                            aptpAvg >= 9.5 && !aptpHasFail ? <span className="text-blue-700">Transita</span> : <span className="text-red-700">Não transita</span>
+                          )
+                        ) : '-'}
                       </td>
 
                       {/* CLASSIFICAÇÃO FINAL */}
-                      <td className={`font-black text-[10px] px-2 whitespace-nowrap ${
-                        row.finalStatus === 'DISPENSADO' ? 'text-emerald-700 font-bold' :
-                        row.finalStatus === 'ADMITIDO' ? 'text-blue-700 font-bold' : 'text-red-600 font-bold'
-                      }`}>
-                        {row.finalStatus}
+                      <td className="px-2 py-1 whitespace-nowrap text-center">
+                        <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase ${
+                          row.finalStatus === 'DISPENSADO' ? 'border border-emerald-500 bg-emerald-50 text-emerald-700' :
+                          row.finalStatus === 'ADMITIDO' || row.finalStatus === 'TRANSITA' ? 'border border-blue-500 bg-blue-50 text-blue-700' : 
+                          'border border-red-500 bg-red-50 text-red-700'
+                        }`}>
+                          {row.finalStatus}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -809,6 +925,7 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
 
                   {/* M: GERAL */}
                   <th className="pauta-v-text-sm">GERAL</th>
+                  <th className="pauta-v-text-sm" title="Comportamento">COMP.</th>
 
                   {/* Resultado Final: LETRA | CIENCIA | CPP */}
                   <th className="pauta-v-text-sm">LETRA</th>
@@ -853,10 +970,14 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
                   const allMds = [...ccsMds, ...cienciaMds, ...cppMcs];
                   const mGeral = allMds.length > 0 ? Math.round(allMds.reduce((a, b) => a + b, 0) / allMds.length) : null;
 
-                  const resultadoLetra = ccsGlobal !== null ? (ccsGlobal >= 9.5 ? 'APROV' : 'REPR') : '-';
-                  const resultadoCiencia = cienciaGlobal !== null ? (cienciaGlobal >= 9.5 ? 'APROV' : 'REPR') : '-';
-                  const resultadoCpp = cppGlobal !== null ? (cppGlobal >= 9.5 ? 'APROV' : 'REPR') : '-';
-                  const rGeralFinal = mGeral !== null ? (mGeral >= 9.5 ? 'APROVADO' : 'REPROVADO') : '-';
+                  const ccsHasExamFail = examDetails.some(e => activeSubjects.find(as => as.id === e.subId)?.area === 'CS' && e.md !== null && e.md < 9.5);
+                  const cienciaHasExamFail = examDetails.some(e => activeSubjects.find(as => as.id === e.subId)?.area === 'MCN' && e.md !== null && e.md < 9.5);
+                  const cppHasExamFail = continuousDetails.some(c => activeSubjects.find(as => as.id === c.subId)?.area === 'APTP' && c.mc !== null && c.mc < 9.5);
+
+                  const resultadoLetra = ccsGlobal !== null ? (ccsGlobal >= 9.5 && !ccsHasExamFail ? 'APROV' : 'REPR') : '-';
+                  const resultadoCiencia = cienciaGlobal !== null ? (cienciaGlobal >= 9.5 && !cienciaHasExamFail ? 'APROV' : 'REPR') : '-';
+                  const resultadoCpp = cppGlobal !== null ? (cppGlobal >= 9.5 && !cppHasExamFail ? 'APROV' : 'REPR') : '-';
+                  const rGeralFinal = mGeral !== null ? (resultadoLetra === 'APROV' && resultadoCiencia === 'APROV' && resultadoCpp === 'APROV' && mGeral >= 9.5 ? 'APROVADO' : 'REPROVADO') : '-';
 
                   return (
                     <tr key={student.id} className="hover:bg-yellow-50/50">
@@ -886,32 +1007,37 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
                       {/* 9 Exam Subjects: M.FREQ. | 1ª EPC | MD.1ª */}
                       {examDetails.map(ed => (
                         <React.Fragment key={ed.subId}>
-                          <td className={`font-semibold ${ed.mf !== null && ed.mf < 9.5 ? 'text-red-600' : 'text-black'}`}>
-                            {ed.mf ?? ''}
-                          </td>
-                          <td className="font-black text-blue-900 bg-yellow-50/40">
-                            {ed.ne ?? ''}
-                          </td>
-                          <td className={`font-black bg-gray-50/80 ${ed.md !== null && ed.md < 9.5 ? 'text-red-600' : 'text-black'}`}>
-                            {ed.md ?? ''}
-                          </td>
+                          {renderPautaGradeCell(ed.mf, { isBold: true, forceInteger: true })}
+                          {renderPautaGradeCell(ed.ne, { isBold: true, bgClass: 'bg-yellow-50/40', customTextColor: 'text-blue-900' })}
+                          {renderPautaGradeCell(ed.md, { isBold: true, bgClass: 'bg-gray-50/80', forceInteger: true })}
                         </React.Fragment>
                       ))}
 
                       {/* 5 Continuous Subjects: M.C */}
                       {continuousDetails.map(cd => (
-                        <td key={cd.subId} className={`font-black bg-gray-50/50 ${cd.mc !== null && cd.mc < 9.5 ? 'text-red-600' : 'text-black'}`}>
-                          {cd.mc ?? ''}
-                        </td>
+                        <React.Fragment key={cd.subId}>
+                          {renderPautaGradeCell(cd.mc, { isBold: true, bgClass: 'bg-gray-50/50', forceInteger: true })}
+                        </React.Fragment>
                       ))}
 
                       {/* M.GLOBAL: CCS | CIENCIA | CPP */}
-                      <td className="font-bold text-[10px] bg-blue-50/50 text-black">{ccsGlobal ?? ''}</td>
-                      <td className="font-bold text-[10px] bg-blue-50/50 text-black">{cienciaGlobal ?? ''}</td>
-                      <td className="font-bold text-[10px] bg-blue-50/50 text-black">{cppGlobal ?? ''}</td>
+                      {renderPautaGradeCell(ccsGlobal, { isBold: true, bgClass: 'bg-blue-50/50', forceInteger: true })}
+                      {renderPautaGradeCell(cienciaGlobal, { isBold: true, bgClass: 'bg-blue-50/50', forceInteger: true })}
+                      {renderPautaGradeCell(cppGlobal, { isBold: true, bgClass: 'bg-blue-50/50', forceInteger: true })}
 
                       {/* M GERAL */}
-                      <td className="font-black text-[11px] bg-blue-100/70 text-blue-950">{mGeral ?? ''}</td>
+                      {renderPautaGradeCell(mGeral, { isBold: true, bgClass: 'bg-blue-100/70', customTextColor: 'text-blue-950', forceInteger: true })}
+
+                      {/* Comportamento */}
+                      <td className="text-[10px] font-bold text-center">
+                        {rGeralFinal === 'APROVADO' && (mGeral !== null && mGeral >= 14) ? (
+                          <span className="text-emerald-700">Exclt</span>
+                        ) : rGeralFinal === 'REPROVADO' ? (
+                          <span className="text-red-700">Sufi</span>
+                        ) : (
+                          <span className="text-blue-700">Bom</span>
+                        )}
+                      </td>
 
                       {/* Resultado Final: LETRA | CIENCIA | CPP */}
                       <td className={`text-[10px] font-bold ${resultadoLetra === 'APROV' ? 'text-green-800' : resultadoLetra === 'REPR' ? 'text-red-700' : 'text-black'}`}>
@@ -948,25 +1074,24 @@ export const OfficialPauta: React.FC<OfficialPautaProps> = ({ type, selectedTurm
         )}
 
         {/* Official Footer */}
-        <div className="mt-8 pt-4 border-t-2 border-black flex justify-between items-end text-xs font-bold uppercase text-black font-serif">
-          <div className="text-center w-64">
-            <p className="mb-8">O Presidente do Júri</p>
-            <div className="border-b border-black w-48 mx-auto"></div>
-            <p className="mt-1 text-[10px]">Data: _____ / _____ / 2024</p>
+        <div className="mt-8 pt-4 border-t-2 border-black flex flex-wrap justify-between items-end gap-4 text-xs font-bold uppercase text-black font-serif">
+          <div className="text-center">
+            <SignatureBox label={type === 'frequencia' ? "O Director de Turma" : "O Presidente do Júri"} />
+            <p className="mt-1 text-[10px]">Data: _____ / _____ / 2026, às 12:00 da manhã</p>
           </div>
-          <div className="text-center text-[10px] normal-case text-gray-700 font-sans">
+          <div className="text-center">
+            <SignatureBox label="O Dir. Adj. Pedagógico" />
+            <p className="mt-1 text-[10px]">Data: _____ / _____ / 2026, às 12:00 da manhã</p>
+          </div>
+          <div className="text-center text-[10px] normal-case text-gray-700 font-sans max-w-xs">
             <p>Moçambique • Sistema Nacional de Educação • MINEDH</p>
             <p className="font-bold text-black uppercase mt-0.5">
-              Júri composto por 30 alunos • M.CICLO = M.FREQ • Pós-Laboral contagem contínua
+              {type === 'exame' ? 'Júri composto por 30 alunos • ' : ''}M.CICLO = M.FREQ • Pós-Laboral contagem contínua
             </p>
-          </div>
-          <div className="text-center w-64">
-            <p className="mb-8">O Director da Escola</p>
-            <div className="border-b border-black w-48 mx-auto"></div>
-            <p className="mt-1 text-[10px]">Data: _____ / _____ / 2024</p>
           </div>
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

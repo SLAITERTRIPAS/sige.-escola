@@ -1080,15 +1080,38 @@ export function EmployeeManagement() {
                   value={newEmployee.leadershipRole} 
                   onChange={e => setNewEmployee({ ...newEmployee, leadershipRole: e.target.value })}
                 >
-                  <option value="">Nenhum (Sem Chefia)</option>
-                  <option value="Director(a) da Escola">Director(a) da Escola</option>
-                  <option value="Director(a) Adjunto(a) Pedagógico(a)">Director(a) Adjunto(a) Pedagógico(a)</option>
-                  <option value="Chefe de Secretaria">Chefe de Secretaria</option>
-                  <option value="Delegado(a) de Disciplina">Delegado(a) de Disciplina</option>
-                  <option value="Director(a) de Turma">Director(a) de Turma</option>
-                  <option value="Coordenador(a) de Ciclo / Turno">Coordenador(a) de Ciclo / Turno</option>
-                  <option value="Chefe de Departamento">Chefe de Departamento</option>
-                  <option value="Outro">Outro</option>
+                  <option value="">Nenhum (Sem Chefia / Função Padrão)</option>
+                  
+                  <optgroup label="Gestão">
+                    <option value="Director da Escola">Director da Escola</option>
+                    <option value="Director Pedagógico">Director Pedagógico</option>
+                    <option value="Director Administrativo">Director Administrativo</option>
+                  </optgroup>
+
+                  <optgroup label="Secretaria">
+                    <option value="Chefe da Secretaria">Chefe da Secretaria</option>
+                    <option value="Técnico Administrativo">Técnico Administrativo</option>
+                    <option value="Arquivista">Arquivista</option>
+                  </optgroup>
+
+                  <optgroup label="Pedagógico">
+                    <option value="Coordenador de Ciclo">Coordenador de Ciclo</option>
+                    <option value="Chefe de Grupo de Disciplina">Chefe de Grupo de Disciplina</option>
+                    <option value="Professor">Professor</option>
+                  </optgroup>
+
+                  <optgroup label="Apoio">
+                    <option value="Bibliotecário">Bibliotecário</option>
+                    <option value="Técnico de Informática">Técnico de Informática</option>
+                    <option value="Laboratorista">Laboratorista</option>
+                    <option value="Guarda">Guarda</option>
+                    <option value="Servente">Servente</option>
+                  </optgroup>
+
+                  <optgroup label="Órgãos Participativos">
+                    <option value="Conselho da Escola">Conselho da Escola</option>
+                    <option value="Associação de Pais e Encarregados de Educação">Associação de Pais e Encarregados de Educação</option>
+                  </optgroup>
                 </select>
               </div>
 

@@ -1,3 +1,5 @@
+import { generateIUE } from '../utils/iueGenerator';
+
 export interface ProvinceDistricts {
   province: string;
   districts: string[];
@@ -225,15 +227,9 @@ export function getDistrictsForProvince(provinceName: string): string[] {
   return found ? found.districts : [];
 }
 
-/**
- * Generates an automatic unique employee ID based on initials of the name and the NUIT
- * Example: Nome "Carlos Alberto Langa", NUIT "102938475" -> "CAL-102938475"
- */
-export function generateEmployeeId(name: string, nuit: string): string {
+export function getInitials(name: string): string {
   const cleanName = (name || '').trim();
-  const cleanNuit = (nuit || '').trim().replace(/\D/g, '');
-  if (!cleanName && !cleanNuit) return '';
-
+  if (!cleanName) return '';
   const stopWords = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
   const words = cleanName.split(/\s+/).filter(Boolean);
   
@@ -245,7 +241,51 @@ export function generateEmployeeId(name: string, nuit: string): string {
   if (!initials && words.length > 0) {
     initials = words.map(w => w[0]?.toUpperCase() || '').join('');
   }
+  return initials;
+}
 
-  const prefix = initials || 'COL';
-  return cleanNuit ? `${prefix}-${cleanNuit}` : prefix;
+/**
+ * Generates an automatic unique employee ID based on initials of the name and the NUIT
+ */
+export function generateEmployeeId(name: string, nuit: string): string {
+  const initials = getInitials(name) || 'COL';
+  const cleanNuit = (nuit || '').trim().replace(/\D/g, '');
+  return cleanNuit ? `${initials}-${cleanNuit}` : initials;
+}
+
+export { 
+  generateIUE, 
+  generateNIM, 
+  formatDocumentReference, 
+  generateStudentQRCodePayload, 
+  parseIUE, 
+  validateIUE 
+} from '../utils/iueGenerator';
+
+/**
+ * Generates an automatic unique student ID / IUE based on institutional standard:
+ * [INICIAIS]-[Nº_DOCUMENTO]-[CÓDIGO_ESCOLA]/[PROVÍNCIA]/[DISTRITO]/[ANO]
+ */
+export function generateStudentId(
+  name: string, 
+  nuit?: string, 
+  idCardNumber?: string,
+  extra?: { schoolName?: string; schoolCode?: string; province?: string; district?: string; academicYear?: number | string }
+): string {
+  // If full parameters are provided, generate standard IUE
+  if (extra?.province || extra?.schoolName || extra?.district) {
+    return generateIUE({
+      name,
+      documentNumber: idCardNumber || nuit,
+      schoolName: extra.schoolName,
+      schoolCode: extra.schoolCode,
+      province: extra.province,
+      district: extra.district,
+      academicYear: extra.academicYear
+    });
+  }
+
+  const initials = getInitials(name) || 'ALU';
+  const identifier = (nuit || idCardNumber || '').trim().replace(/\D/g, '');
+  return identifier ? `${initials}-${identifier}` : `${initials}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 }

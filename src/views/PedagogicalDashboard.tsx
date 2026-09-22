@@ -29,6 +29,7 @@ import {
 import { TrimesterReport } from "../types";
 import { OfficialPauta } from "../components/OfficialPautas";
 import { GovernanceChat } from "../components/GovernanceChat";
+import { OfficialMessages } from "../components/OfficialMessages";
 import { CollapsibleSidebar } from "../components/CollapsibleSidebar";
 import { SidebarMenu } from "../components/SidebarMenu";
 import {
@@ -39,6 +40,8 @@ import {
 import { GestaoCorpoDiscente } from "../components/GestaoCorpoDiscente";
 import { AcademicPerformanceChart } from "../components/AcademicPerformanceChart";
 import { AcademicCalendarComponent } from "../components/AcademicCalendarComponent";
+import { TeacherReport } from "../components/TeacherReport";
+import { SignatureManager } from "../components/SignatureManager";
 
 type Tab =
   | "overview"
@@ -357,64 +360,68 @@ export function PedagogicalDashboard() {
             else setActiveTab(tab as any);
           }}
           additionalContent={
-            <div className="space-y-1">
-              <button
-                onClick={() => {
-                  setActiveTab("pautas");
-                  setPautaSubView("frequencia");
-                }}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === "pautas" && pautaSubView === "frequencia"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <FileSpreadsheet className="h-4 w-4 text-slate-400" /> Pauta
-                Frequência
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab("pautas");
-                  setPautaSubView("pauta_exames");
-                }}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === "pautas" && pautaSubView === "pauta_exames"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Award className="h-4 w-4 text-slate-400" /> Pauta Geral Exames
-              </button>
-              <button
-                onClick={() => setActiveTab("corpo_discente")}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === "corpo_discente"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Users className="h-4 w-4 text-slate-400" /> Corpo Discente
-              </button>
-              <button
-                onClick={() => setActiveTab("docentes")}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === "docentes"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Users className="h-4 w-4 text-slate-400" /> Docentes
-              </button>
-              <button
-                onClick={() => setActiveTab("horarios")}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
-                  activeTab === "horarios"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <Clock className="h-4 w-4 text-slate-400" /> Horários
-              </button>
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <div className="px-4 mb-2">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gestão Acadêmica</h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveTab("pautas");
+                    setPautaSubView("frequencia");
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === "pautas" && pautaSubView === "frequencia"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-slate-400" /> Pautas de Frequência
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab("pautas");
+                    setPautaSubView("pauta_exames");
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === "pautas" && pautaSubView === "pauta_exames"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <Award className="h-4 w-4 text-slate-400" /> Cadernetas e Exames
+                </button>
+                <button
+                  onClick={() => setActiveTab("disciplinas")}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === "disciplinas"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <BookOpen className="h-4 w-4 text-slate-400" /> Disciplinas
+                </button>
+                <button
+                  onClick={() => setActiveTab("docentes")}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === "docentes"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <Users className="h-4 w-4 text-slate-400" /> Docentes
+                </button>
+                <button
+                  onClick={() => setActiveTab("corpo_discente")}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === "corpo_discente"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <GraduationCap className="h-4 w-4 text-slate-400" /> Turmas e Alunos
+                </button>
+              </div>
             </div>
           }
         />
@@ -427,44 +434,15 @@ export function PedagogicalDashboard() {
           </div>
         )}
 
-        {activeTab === "calendar" && (
+        {activeTab === "reports" && (
           <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in">
-            <AcademicCalendarComponent />
+            <TeacherReport />
           </div>
         )}
 
-        {["reports", "signature"].includes(
-          activeTab,
-        ) && (
-          <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex flex-col items-center justify-center text-center py-32 bg-white rounded-3xl border border-slate-200 shadow-sm">
-              {activeTab === "calendar" && (
-                <CalendarDays size={64} className="text-slate-200 mb-6" />
-              )}
-              {activeTab === "reports" && (
-                <FileText size={64} className="text-slate-200 mb-6" />
-              )}
-              {activeTab === "statistics" && (
-                <BarChart2 size={64} className="text-slate-200 mb-6" />
-              )}
-              {activeTab === "signature" && (
-                <FileSignature size={64} className="text-slate-200 mb-6" />
-              )}
-
-              <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
-                {activeTab === "calendar"
-                  ? "Calendário Escolar"
-                  : activeTab === "reports"
-                    ? "Relatórios Pedagógicos"
-                    : activeTab === "statistics"
-                      ? "Estatísticas de Rendimento"
-                      : "Assinaturas Digitais"}
-              </h2>
-              <p className="text-slate-500 max-w-sm mt-2">
-                Esta funcionalidade está a ser sincronizada com o Sistema
-                Nacional de Gestão Escolar.
-              </p>
-            </div>
+        {activeTab === "calendar" && (
+          <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in">
+            <AcademicCalendarComponent />
           </div>
         )}
 
@@ -953,7 +931,7 @@ export function PedagogicalDashboard() {
 
                                 {/* MF (MÉDIA DO CICLO = MÉDIA DE FREQUÊNCIA) */}
                                 <td
-                                  className="px-3 py-2.5 text-center font-extrabold text-blue-900 bg-blue-50/40 border-r border-gray-200"
+                                  className={`px-3 py-2.5 text-center font-extrabold bg-blue-50/40 border-r border-gray-200 ${st.mf !== null && st.mf < 9.5 ? 'text-red-600' : 'text-blue-900'}`}
                                   title="Média do Ciclo = Média de Frequência"
                                 >
                                   {st.mf !== null ? st.mf.toFixed(1) : "-"}
@@ -1513,15 +1491,21 @@ export function PedagogicalDashboard() {
           </div>
         )}
 
+        {activeTab === "signature" && (
+          <div className="max-w-5xl mx-auto pb-12">
+            <SignatureManager />
+          </div>
+        )}
+
         {activeTab === "corpo_discente" && (
           <div className="max-w-[100vw] mx-auto pb-12">
             <GestaoCorpoDiscente />
           </div>
         )}
 
-        {activeTab === "chat" && (
-          <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4">
-            <GovernanceChat />
+        {(activeTab === "chat" || activeTab === "messages") && (
+          <div className="w-full animate-in fade-in slide-in-from-bottom-4">
+            <OfficialMessages />
           </div>
         )}
       </div>
